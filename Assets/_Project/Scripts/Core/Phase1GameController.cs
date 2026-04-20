@@ -263,8 +263,8 @@ namespace JoyconBaseball.Phase1.Core
 
         public Vector3 BuildHitVelocity(float contactPower, float verticalInput, float horizontalInput)
         {
-            var forward = 17f + contactPower * 10f;
-            var upward = 4f + (verticalInput * 6f) + (contactPower * 2f);
+            var forward = 8f + contactPower * 18f;   // 最弱: 8 m/s、フルスイング: 26 m/s
+            var upward = 3f + (verticalInput * 5f) + (contactPower * 3f);
             var side = horizontalInput * 8f;
             return new Vector3(side, upward, forward);
         }
@@ -335,6 +335,18 @@ namespace JoyconBaseball.Phase1.Core
 
         private void RegisterBattedBallResult(HitResult result)
         {
+            if (result == HitResult.Foul)
+            {
+                // ファール：2ストライク未満なら+1、2ストライクなら変化なし（三振にならない）
+                if (strikes < 2)
+                {
+                    strikes++;
+                }
+                uiController.ShowCenterPopup("FOUL!", new Color(1f, 0.55f, 0.1f));
+                UpdateHud("FOUL");
+                return;
+            }
+
             balls = 0;
             strikes = 0;
 

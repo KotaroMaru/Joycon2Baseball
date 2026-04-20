@@ -5,16 +5,20 @@ namespace JoyconBaseball.Phase1.Gameplay
 {
     public sealed class BatController : MonoBehaviour
     {
-        private const float JoyconSwingReleaseRatio = 0.45f;
+        private const float SwingWindowSeconds = 0.6f;
+        private const float BaselineSmoothTime = 1.0f;  // ベースライン追従の時定数（秒）
 
         private Phase1GameController controller;
         private Joycon2Bridge joyconBridge;
 
         private float joyconPeakSwingAcceleration;
         private bool swinging;
+        private float swingTimer;
+        private float accelBaseline;
+        private bool baselineInitialized;
         private bool useJoyconSwingInput;
 
-        private float joyconSwingThreshold = 1.35f;
+        private float joyconSwingThreshold = 2.0f;  // ベースラインからの突出量の閾値
 
         public void Initialize(Phase1GameController gameController, Transform pivot)
         {
@@ -51,6 +55,9 @@ namespace JoyconBaseball.Phase1.Gameplay
             }
         }
 
+        private const float Restitution = 0.4f;
+        private const float MaxSwingSpeed = 36f;
+
         private void OnCollisionEnter(Collision collision)
         {
             var ball = collision.gameObject.GetComponent<Phase1Ball>();
@@ -59,17 +66,34 @@ namespace JoyconBaseball.Phase1.Gameplay
                 return;
             }
 
-            var contactPower = ShouldUseJoyconSwingInput()
-                ? Mathf.Clamp01(Mathf.InverseLerp(joyconSwingThreshold, joyconSwingThreshold * 3.25f, joyconPeakSwingAcceleration))
-                : 0.65f;
+            if (controller == null)
+            {
+                Debug.LogError($"[Bat] controller が null！このBatController({gameObject.name})はInitialize未呼び出しです。");
+                return;
+            }
 
-            var batEulerX = NormalizeAngle(transform.eulerAngles.x);
-            var batEulerY = NormalizeAngle(transform.eulerAngles.y);
-            var verticalInput = Mathf.Clamp(batEulerX, -25f, 25f) / -25f;
-            var horizontalInput = Mathf.Clamp(batEulerY, -30f, 30f) / 30f;
+            // 1. 衝突法線 = バット面がボールを押し出す方向（打球方向の基底）
+            var hitNormal = collision.contacts[0].normal;
 
-            var hitVelocity = controller.BuildHitVelocity(contactPower, verticalInput, horizontalInput);
+            // 2. 入射ピッチ速度のうち、バット面に垂直な成分（跳ね返りに寄与）
+            var ballRigidbody = collision.rigidbody;
+            var incomingSpeed = ballRigidbody != null
+                ? Mathf.Max(0f, Vector3.Dot(ballRigidbody.linearVelocity, -hitNormal))
+                : 0f;
+
+            // 3. JoyCon スイング速度（ピーク加速度 → m/s に換算）
+            // joyconPeakSwingAcceleration はベースラインからの差分値
+            // 閾値(2.0)〜閾値×3倍(6.0)の範囲でMaxSwingSpeedにマッピング
+            var swingSpeed = ShouldUseJoyconSwingInput()
+                ? Mathf.Lerp(0f, MaxSwingSpeed, Mathf.InverseLerp(joyconSwingThreshold, joyconSwingThreshold * 3f, joyconPeakSwingAcceleration))
+                : 0f;
+
+            // 4. 打球速度 = (スイング速度 + ピッチ反発) × 法線方向
+            var hitSpeed = swingSpeed + incomingSpeed * Restitution;
+            var hitVelocity = hitNormal * hitSpeed;
+
             controller.NotifyBallHit(hitVelocity);
+            joyconPeakSwingAcceleration = 0f;
         }
 
         private bool ShouldUseJoyconSwingInput()
@@ -82,27 +106,43 @@ namespace JoyconBaseball.Phase1.Gameplay
 
         private void HandleJoyconSwing()
         {
-            var linearAcceleration = joyconBridge.GetRightLinearAcceleration(transform.rotation);
-            var accelMagnitude = linearAcceleration.magnitude;
+            // 生の加速度を使用（rotation精度に依存しない）
+            var accelMagnitude = joyconBridge.RightAccel.magnitude;
 
-            if (!swinging && accelMagnitude >= joyconSwingThreshold)
+            // ベースライン初期化
+            if (!baselineInitialized)
+            {
+                accelBaseline = accelMagnitude;
+                baselineInitialized = true;
+            }
+
+            // ゆっくりベースラインを追従（重力・ドリフトを吸収）
+            if (!swinging)
+            {
+                accelBaseline = Mathf.Lerp(accelBaseline, accelMagnitude, Time.deltaTime / BaselineSmoothTime);
+            }
+
+            var accelDelta = accelMagnitude - accelBaseline;
+
+            if (!swinging && accelDelta >= joyconSwingThreshold)
             {
                 swinging = true;
-                joyconPeakSwingAcceleration = accelMagnitude;
+                swingTimer = 0f;
+                joyconPeakSwingAcceleration = accelDelta;
+                Debug.Log($"[Swing] スイング開始: delta={accelDelta:F2}, baseline={accelBaseline:F2}, raw={accelMagnitude:F2}");
             }
             else if (swinging)
             {
-                joyconPeakSwingAcceleration = Mathf.Max(joyconPeakSwingAcceleration, accelMagnitude);
-                if (accelMagnitude <= joyconSwingThreshold * JoyconSwingReleaseRatio)
+                swingTimer += Time.deltaTime;
+                joyconPeakSwingAcceleration = Mathf.Max(joyconPeakSwingAcceleration, accelDelta);
+
+                if (swingTimer >= SwingWindowSeconds)
                 {
                     swinging = false;
+                    Debug.Log($"[Swing] スイング終了: peak={joyconPeakSwingAcceleration:F2}");
+                    joyconPeakSwingAcceleration = 0f;
                 }
             }
-        }
-
-        private static float NormalizeAngle(float angle)
-        {
-            return angle > 180f ? angle - 360f : angle;
         }
     }
 }

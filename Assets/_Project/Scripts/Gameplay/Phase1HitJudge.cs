@@ -5,6 +5,7 @@ namespace JoyconBaseball.Phase1.Gameplay
     public enum HitResult
     {
         Out,
+        Foul,
         Single,
         Double,
         HomeRun
