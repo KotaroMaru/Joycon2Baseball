@@ -11,7 +11,7 @@ namespace JoyconBaseball.Phase1.Gameplay
         private const float LandingDrag = 3f;               // 着地後のリニアドラッグ（大きいほど早く止まる）
         private const float LandingAngularDrag = 3f;        // 着地後のアンギュラードラッグ
 
-        private Phase1GameController controller;
+        private IBallGameController controller;
         private Rigidbody ballBody;
         private bool crossedPlate;
         private bool wasHit;
@@ -25,7 +25,7 @@ namespace JoyconBaseball.Phase1.Gameplay
 
         public bool CanBeHit => !wasHit && !crossedPlate;
 
-        public void Initialize(Phase1GameController gameController)
+        public void Initialize(IBallGameController gameController)
         {
             controller = gameController;
             ballBody = GetComponent<Rigidbody>();

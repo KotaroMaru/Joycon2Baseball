@@ -8,7 +8,7 @@ using UnityEngine.InputSystem;
 
 namespace JoyconBaseball.Phase1.Core
 {
-    public sealed class Phase1GameController : MonoBehaviour
+    public sealed class Phase1GameController : MonoBehaviour, IBallGameController
     {
         private const float PitchDistance = 17.4f;
         private const float BatReach = 1.4f;

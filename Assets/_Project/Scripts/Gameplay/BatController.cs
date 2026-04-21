@@ -8,7 +8,7 @@ namespace JoyconBaseball.Phase1.Gameplay
         private const float SwingWindowSeconds = 0.6f;
         private const float BaselineSmoothTime = 1.0f;  // ベースライン追従の時定数（秒）
 
-        private Phase1GameController controller;
+        private IBallGameController controller;
         private Joycon2Bridge joyconBridge;
 
         private float joyconPeakSwingAcceleration;
@@ -20,7 +20,7 @@ namespace JoyconBaseball.Phase1.Gameplay
 
         private float joyconSwingThreshold = 2.0f;  // ベースラインからの突出量の閾値
 
-        public void Initialize(Phase1GameController gameController, Transform pivot)
+        public void Initialize(IBallGameController gameController, Transform pivot)
         {
             controller = gameController;
             joyconBridge ??= new Joycon2Bridge();

@@ -57,7 +57,7 @@ namespace JoyconBaseball.Phase1.Core
         public static BatController GetOrCreateBat(
             Phase1SceneReferences sceneReferences,
             Transform cameraTransform,
-            Phase1GameController controller,
+            IBallGameController controller,
             float reach)
         {
             if (sceneReferences != null && sceneReferences.BatController != null)

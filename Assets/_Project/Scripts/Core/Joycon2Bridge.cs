@@ -19,6 +19,13 @@ namespace JoyconBaseball.Phase1.Core
         private readonly Type joyconButtonsType;
         private readonly FieldInfo joyconDataButtonsField;
 
+        // Left JoyCon
+        private readonly FieldInfo leftConnectedField;
+        private readonly PropertyInfo leftAccelProperty;
+        private readonly PropertyInfo leftStickProperty;
+        private readonly FieldInfo leftJoyconField;
+        private readonly object leftDeviceIdValue;
+
         public Joycon2Bridge()
         {
             managerType = Type.GetType("Joycon2Manager") ?? Type.GetType("Joycon2Manager, Assembly-CSharp");
@@ -49,8 +56,15 @@ namespace JoyconBaseball.Phase1.Core
                 if (joyconDeviceIdType.IsEnum)
                 {
                     rightDeviceIdValue = Enum.Parse(joyconDeviceIdType, "Right", false);
+                    leftDeviceIdValue  = Enum.Parse(joyconDeviceIdType, "Left",  false);
                 }
             }
+
+            // Left JoyCon reflection
+            leftConnectedField = managerType.GetField("leftConnected", BindingFlags.Public | BindingFlags.Instance);
+            leftAccelProperty  = managerType.GetProperty("LeftAccel",  BindingFlags.Public | BindingFlags.Instance);
+            leftStickProperty  = managerType.GetProperty("LeftStick",  BindingFlags.Public | BindingFlags.Instance);
+            leftJoyconField    = managerType.GetField("leftJoycon",    BindingFlags.Public | BindingFlags.Instance);
         }
 
         public bool IsAvailable =>
@@ -143,6 +157,54 @@ namespace JoyconBaseball.Phase1.Core
             }
 
             return Convert.ToUInt32(Enum.Parse(joyconButtonsType, buttonName, false));
+        }
+
+        // ── Left JoyCon ──────────────────────────────────────────
+
+        public bool LeftConnected
+        {
+            get
+            {
+                var instance = GetInstance();
+                return instance != null && leftConnectedField != null && (bool)leftConnectedField.GetValue(instance);
+            }
+        }
+
+        public Vector3 LeftAccel
+        {
+            get
+            {
+                var instance = GetInstance();
+                if (instance == null || leftAccelProperty == null) return Vector3.zero;
+                return (Vector3)leftAccelProperty.GetValue(instance);
+            }
+        }
+
+        public Vector2 LeftStick
+        {
+            get
+            {
+                var instance = GetInstance();
+                if (instance == null || leftStickProperty == null) return Vector2.zero;
+                return (Vector2)leftStickProperty.GetValue(instance);
+            }
+        }
+
+        public uint GetLeftButtonsMask()
+        {
+            var instance = GetInstance();
+            if (instance == null || leftJoyconField == null || joyconDataButtonsField == null) return 0;
+            var joyconData = leftJoyconField.GetValue(instance);
+            if (joyconData == null) return 0;
+            return (uint)joyconDataButtonsField.GetValue(joyconData);
+        }
+
+        public Vector3 ConsumeLeftGyroDelta()
+        {
+            var instance = GetInstance();
+            if (instance == null || consumeGyroDeltaMethod == null || leftDeviceIdValue == null)
+                return Vector3.zero;
+            return (Vector3)consumeGyroDeltaMethod.Invoke(instance, new[] { leftDeviceIdValue });
         }
 
         private object GetInstance()
