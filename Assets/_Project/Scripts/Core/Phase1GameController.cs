@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using JoyconBaseball.Phase1.Audio;
 using JoyconBaseball.Phase1.Gameplay;
 using JoyconBaseball.Phase1.UI;
 using UnityEngine;
@@ -20,6 +21,7 @@ namespace JoyconBaseball.Phase1.Core
         private Joycon2Bridge joyconBridge;
         private Camera mainCamera;
         private Phase1UIController uiController;
+        private Phase1AudioManager audioManager;
         private PitchingMachine pitchingMachine;
         private BatController batController;
         private BoxCollider strikeZoneCollider;
@@ -56,6 +58,7 @@ namespace JoyconBaseball.Phase1.Core
             BuildCamera();
             BuildWorld();
             BuildUi();
+            BuildAudio();
             ShowTitle();
         }
 
@@ -169,6 +172,25 @@ namespace JoyconBaseball.Phase1.Core
             }
         }
 
+        private void BuildAudio()
+        {
+            var audioObject = new GameObject("Phase1AudioManager");
+            audioObject.transform.SetParent(transform);
+            audioManager = audioObject.AddComponent<Phase1AudioManager>();
+            audioManager.Initialize(
+                sceneReferences != null ? sceneReferences.BgmClip : null,
+                sceneReferences != null ? sceneReferences.StartClip : null,
+                sceneReferences != null ? sceneReferences.HitStrongClip : null,
+                sceneReferences != null ? sceneReferences.HitNormalClip : null,
+                sceneReferences != null ? sceneReferences.HitWeakClip : null,
+                sceneReferences != null ? sceneReferences.SwingClip : null,
+                sceneReferences != null ? sceneReferences.CatcherCatchClip : null,
+                sceneReferences != null ? sceneReferences.StrikeClip : null,
+                sceneReferences != null ? sceneReferences.BallClip : null,
+                sceneReferences != null ? sceneReferences.OutClip : null,
+                sceneReferences != null ? sceneReferences.CheeringClip : null);
+        }
+
         private void ShowTitle()
         {
             uiController.ShowTitle();
@@ -186,6 +208,8 @@ namespace JoyconBaseball.Phase1.Core
             uiController.SetHudVisible(true);
             uiController.HideTitle();
             UpdateHud("Press Space to pitch");
+            audioManager.PlayStartSound();
+            audioManager.StartBgm();
         }
 
         private void TryStartPitch()
@@ -215,6 +239,7 @@ namespace JoyconBaseball.Phase1.Core
         {
             pitchInProgress = false;
             activeBall = null;
+            audioManager.PlayCatcherCatchSound();
 
             if (wasStrike)
             {
@@ -234,7 +259,13 @@ namespace JoyconBaseball.Phase1.Core
             }
 
             activeBall.ApplyHit(hitVelocity);
+            audioManager.PlayHitSound(hitVelocity.magnitude);
             UpdateHud("Ball in play");
+        }
+
+        public void NotifySwingStarted()
+        {
+            audioManager.PlaySwingSound();
         }
 
         public void NotifyBallLanded(HitResult result)
@@ -302,6 +333,7 @@ namespace JoyconBaseball.Phase1.Core
                 atBatResults.Add("K");
                 balls = 0;
                 strikes = 0;
+                audioManager.PlayOutSound();
                 CheckGameOver();
                 uiController.ShowCenterPopup("STRIKE OUT!", new Color(0.98f, 0.42f, 0.32f));
                 UpdateHud("Strike out");
@@ -310,6 +342,7 @@ namespace JoyconBaseball.Phase1.Core
 
             if (label == "STRIKE")
             {
+                audioManager.PlayStrikeSound();
                 uiController.ShowCenterPopup("STRIKE!", new Color(0.98f, 0.42f, 0.32f));
             }
 
@@ -330,6 +363,7 @@ namespace JoyconBaseball.Phase1.Core
                 return;
             }
 
+            audioManager.PlayBallSound();
             UpdateHud("BALL");
         }
 
@@ -355,6 +389,7 @@ namespace JoyconBaseball.Phase1.Core
                 case HitResult.HomeRun:
                     atBatResults.Add("HR");
                     ScoreAllRunnersAndBatter();
+                    audioManager.PlayCheeringSound();
                     uiController.ShowCenterPopup("HOMERUN!", new Color(1f, 0.82f, 0.18f));
                     UpdateHud("HOMERUN!");
                     break;
@@ -373,6 +408,7 @@ namespace JoyconBaseball.Phase1.Core
                 default:
                     atBatResults.Add("OUT");
                     outs++;
+                    audioManager.PlayOutSound();
                     CheckGameOver();
                     uiController.ShowCenterPopup("OUT!", new Color(0.95f, 0.3f, 0.3f));
                     UpdateHud("OUT!");
@@ -477,6 +513,7 @@ namespace JoyconBaseball.Phase1.Core
 
             gameOver = true;
             pitchInProgress = false;
+            audioManager.StopBgm();
             uiController.ShowResults(atBatResults, score);
         }
 
@@ -492,6 +529,7 @@ namespace JoyconBaseball.Phase1.Core
             pitchInProgress = false;
             gameOver = false;
             atBatResults.Clear();
+            audioManager.StopBgm();
 
             if (activeBall != null)
             {

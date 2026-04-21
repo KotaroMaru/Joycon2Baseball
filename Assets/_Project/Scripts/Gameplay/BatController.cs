@@ -56,7 +56,7 @@ namespace JoyconBaseball.Phase1.Gameplay
         }
 
         private const float Restitution = 0.4f;
-        private const float MaxSwingSpeed = 36f;
+        private const float MaxSwingSpeed = 34f;
 
         private void OnCollisionEnter(Collision collision)
         {
@@ -83,9 +83,9 @@ namespace JoyconBaseball.Phase1.Gameplay
 
             // 3. JoyCon スイング速度（ピーク加速度 → m/s に換算）
             // joyconPeakSwingAcceleration はベースラインからの差分値
-            // 閾値(2.0)〜閾値×3倍(6.0)の範囲でMaxSwingSpeedにマッピング
+            // 閾値(2.0)〜閾値×5倍(10.0)の範囲でMaxSwingSpeedにマッピング
             var swingSpeed = ShouldUseJoyconSwingInput()
-                ? Mathf.Lerp(0f, MaxSwingSpeed, Mathf.InverseLerp(joyconSwingThreshold, joyconSwingThreshold * 3f, joyconPeakSwingAcceleration))
+                ? Mathf.Lerp(0f, MaxSwingSpeed, Mathf.InverseLerp(joyconSwingThreshold, joyconSwingThreshold * 5f, joyconPeakSwingAcceleration))
                 : 0f;
 
             // 4. 打球速度 = (スイング速度 + ピッチ反発) × 法線方向
@@ -129,6 +129,7 @@ namespace JoyconBaseball.Phase1.Gameplay
                 swinging = true;
                 swingTimer = 0f;
                 joyconPeakSwingAcceleration = accelDelta;
+                controller?.NotifySwingStarted();
                 Debug.Log($"[Swing] スイング開始: delta={accelDelta:F2}, baseline={accelBaseline:F2}, raw={accelMagnitude:F2}");
             }
             else if (swinging)

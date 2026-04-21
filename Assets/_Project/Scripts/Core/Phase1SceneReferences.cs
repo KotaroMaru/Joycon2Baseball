@@ -26,6 +26,19 @@ namespace JoyconBaseball.Phase1.Core
         [SerializeField] private bool useJoyconGyroBatControl;
         [SerializeField] private float joyconSwingThreshold = 1.35f;
 
+        [Header("Audio")]
+        [SerializeField] private AudioClip bgmClip;
+        [SerializeField] private AudioClip startClip;
+        [SerializeField] private AudioClip hitStrongClip;
+        [SerializeField] private AudioClip hitNormalClip;
+        [SerializeField] private AudioClip hitWeakClip;
+        [SerializeField] private AudioClip swingClip;
+        [SerializeField] private AudioClip catcherCatchClip;
+        [SerializeField] private AudioClip strikeClip;
+        [SerializeField] private AudioClip ballClip;
+        [SerializeField] private AudioClip outClip;
+        [SerializeField] private AudioClip cheeringClip;
+
         public Camera GameplayCamera => gameplayCamera;
         public Phase1UIController UiController => uiController;
         public BatController BatController => batController;
@@ -36,5 +49,16 @@ namespace JoyconBaseball.Phase1.Core
         public bool CreateDirectionalLightIfMissing => createDirectionalLightIfMissing;
         public bool UseJoyconGyroBatControl => useJoyconGyroBatControl;
         public float JoyconSwingThreshold => joyconSwingThreshold;
+        public AudioClip BgmClip => bgmClip;
+        public AudioClip StartClip => startClip;
+        public AudioClip HitStrongClip => hitStrongClip;
+        public AudioClip HitNormalClip => hitNormalClip;
+        public AudioClip HitWeakClip => hitWeakClip;
+        public AudioClip SwingClip => swingClip;
+        public AudioClip CatcherCatchClip => catcherCatchClip;
+        public AudioClip StrikeClip => strikeClip;
+        public AudioClip BallClip => ballClip;
+        public AudioClip OutClip => outClip;
+        public AudioClip CheeringClip => cheeringClip;
     }
 }

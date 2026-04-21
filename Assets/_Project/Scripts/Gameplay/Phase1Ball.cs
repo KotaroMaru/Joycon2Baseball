@@ -8,7 +8,7 @@ namespace JoyconBaseball.Phase1.Gameplay
         private const float MaxLifetime = 20f;
         private const float StopVelocityThreshold = 0.4f;  // これ以下になったら停止とみなす (m/s)
         private const float MaxRollTime = 3.5f;               // 着地後この秒数でタイムアウト判定
-        private const float LandingDrag = 3.5f;               // 着地後のリニアドラッグ（大きいほど早く止まる）
+        private const float LandingDrag = 3f;               // 着地後のリニアドラッグ（大きいほど早く止まる）
         private const float LandingAngularDrag = 3f;        // 着地後のアンギュラードラッグ
 
         private Phase1GameController controller;
