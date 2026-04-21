@@ -62,7 +62,7 @@ namespace JoyconBaseball.Phase1.Gameplay
                 if (stopped || timedOut)
                 {
                     landingResolved = true;
-                    controller.NotifyBallLanded(hasFieldResult ? fieldResult : Phase1HitJudge.Judge(transform.position));
+                    controller.NotifyBallLanded(hasFieldResult ? fieldResult : Phase1HitJudge.Judge(transform.position, controller.BatterPosition));
                     Destroy(gameObject, 0.05f);
                 }
             }

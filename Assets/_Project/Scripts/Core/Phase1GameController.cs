@@ -10,7 +10,7 @@ namespace JoyconBaseball.Phase1.Core
 {
     public sealed class Phase1GameController : MonoBehaviour
     {
-        private const float PitchDistance = 18f;
+        private const float PitchDistance = 17.4f;
         private const float BatReach = 1.4f;
         private const float MinPitchSpeedKmh = 40f;
         private const float MaxPitchSpeedKmh = 200f;
@@ -46,6 +46,7 @@ namespace JoyconBaseball.Phase1.Core
 
         public float PitchSpeedKmh => pitchSpeedKmh;
         public bool PitchInProgress => pitchInProgress;
+        public Vector3 BatterPosition => batController != null ? batController.transform.position : Vector3.zero;
 
         private void Awake()
         {
@@ -393,6 +394,12 @@ namespace JoyconBaseball.Phase1.Core
                     uiController.ShowCenterPopup("HOMERUN!", new Color(1f, 0.82f, 0.18f));
                     UpdateHud("HOMERUN!");
                     break;
+                case HitResult.Triple:
+                    atBatResults.Add("3B");
+                    AdvanceRunnersOnHit(3);
+                    uiController.ShowCenterPopup("3 BASE HIT!", new Color(0.9f, 0.55f, 1f));
+                    UpdateHud("TRIPLE!");
+                    break;
                 case HitResult.Double:
                     atBatResults.Add("2B");
                     AdvanceRunnersOnHit(2);
@@ -446,39 +453,33 @@ namespace JoyconBaseball.Phase1.Core
         {
             if (bases == 1)
             {
-                if (runnerOnThird)
-                {
-                    score++;
-                }
-
-                if (runnerOnSecond)
-                {
-                    score++;
-                }
-
-                runnerOnThird = runnerOnFirst;
+                if (runnerOnThird) score++;
+                var newThird = runnerOnSecond;
+                var newSecond = runnerOnFirst;
                 runnerOnFirst = true;
+                runnerOnSecond = newSecond;
+                runnerOnThird = newThird;
                 return;
             }
 
-            if (runnerOnFirst)
+            if (bases == 2)
             {
-                score++;
+                if (runnerOnThird) score++;
+                if (runnerOnSecond) score++;
+                var newThird = runnerOnFirst;
+                runnerOnFirst = false;
+                runnerOnSecond = true;
+                runnerOnThird = newThird;
+                return;
             }
 
-            if (runnerOnSecond)
-            {
-                score++;
-            }
-
-            if (runnerOnThird)
-            {
-                score++;
-            }
-
+            // bases == 3 (Triple)
+            if (runnerOnFirst) score++;
+            if (runnerOnSecond) score++;
+            if (runnerOnThird) score++;
             runnerOnFirst = false;
-            runnerOnSecond = true;
-            runnerOnThird = false;
+            runnerOnSecond = false;
+            runnerOnThird = true;
         }
 
         private void ScoreAllRunnersAndBatter()
