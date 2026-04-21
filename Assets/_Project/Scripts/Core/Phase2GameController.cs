@@ -49,10 +49,12 @@ namespace JoyconBaseball.Phase1.Core
 
         // ── JoyCon ボタンマスク ────────────────────────────────
         private uint previousRightButtonsMask;
+        private uint previousLeftButtonsMask;
         private uint buttonMaskA;
         private uint buttonMaskR;
         private uint buttonMaskX;
         private uint buttonMaskB;
+        private uint buttonMaskL_left;   // Left JoyCon の L ボタン
 
         public Vector3 BatterPosition =>
             batController != null ? batController.transform.position : Vector3.zero;
@@ -65,10 +67,11 @@ namespace JoyconBaseball.Phase1.Core
         {
             sceneReferences = FindFirstObjectByType<Phase1SceneReferences>();
             joyconBridge    = new Joycon2Bridge();
-            buttonMaskA     = joyconBridge.GetButtonMask("A");
-            buttonMaskB     = joyconBridge.GetButtonMask("B");
-            buttonMaskR     = joyconBridge.GetButtonMask("R");
-            buttonMaskX     = joyconBridge.GetButtonMask("X");
+            buttonMaskA      = joyconBridge.GetButtonMask("A");
+            buttonMaskB      = joyconBridge.GetButtonMask("B");
+            buttonMaskR      = joyconBridge.GetButtonMask("R");
+            buttonMaskX      = joyconBridge.GetButtonMask("X");
+            buttonMaskL_left = joyconBridge.GetButtonMask("L");
 
             BuildCameras();
             BuildWorld();
@@ -192,6 +195,9 @@ namespace JoyconBaseball.Phase1.Core
             var rightMask = joyconBridge != null && joyconBridge.IsAvailable && joyconBridge.RightConnected
                 ? joyconBridge.GetRightButtonsMask()
                 : 0;
+            var leftMask = joyconBridge != null && joyconBridge.IsAvailable && joyconBridge.LeftConnected
+                ? joyconBridge.GetLeftButtonsMask()
+                : 0;
 
             if (gameOver)
             {
@@ -199,6 +205,7 @@ namespace JoyconBaseball.Phase1.Core
                     ResetGame();
 
                 previousRightButtonsMask = rightMask;
+                previousLeftButtonsMask  = leftMask;
                 return;
             }
 
@@ -209,16 +216,18 @@ namespace JoyconBaseball.Phase1.Core
                 StartGameplay();
             }
 
-            // ピッチャーキャリブレーション（V キー）
-            if (kb != null && kb.vKey.wasPressedThisFrame)
-            {
-                pitcherController.CalibrateThrowPose();
-            }
-
-            // バッターキャリブレーション（C キー）
-            if (kb != null && kb.cKey.wasPressedThisFrame)
+            // バッター（右JoyCon）キャリブレーション: R ボタン / C キー
+            if ((kb != null && kb.cKey.wasPressedThisFrame) ||
+                WasJoyconButtonPressed(rightMask, buttonMaskR))
             {
                 CalibrateJoycon();
+            }
+
+            // ピッチャー（左JoyCon）キャリブレーション: L ボタン / V キー
+            if ((kb != null && kb.vKey.wasPressedThisFrame) ||
+                WasLeftJoyconButtonPressed(leftMask, buttonMaskL_left))
+            {
+                pitcherController.CalibrateThrowPose();
             }
 
             // ピッチ速度調整
@@ -235,6 +244,7 @@ namespace JoyconBaseball.Phase1.Core
             }
 
             previousRightButtonsMask = rightMask;
+            previousLeftButtonsMask  = leftMask;
         }
 
         // ── ゲームフロー ─────────────────────────────────────────
@@ -507,6 +517,11 @@ namespace JoyconBaseball.Phase1.Core
             targetMask != 0 &&
             (currentMask & targetMask) != 0 &&
             (previousRightButtonsMask & targetMask) == 0;
+
+        private bool WasLeftJoyconButtonPressed(uint currentMask, uint targetMask) =>
+            targetMask != 0 &&
+            (currentMask & targetMask) != 0 &&
+            (previousLeftButtonsMask & targetMask) == 0;
 
         private void UpdateHud(string message)
         {

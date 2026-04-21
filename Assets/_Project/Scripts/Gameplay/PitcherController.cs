@@ -62,9 +62,9 @@ namespace JoyconBaseball.Phase1.Gameplay
         private float calibAccelX;
         private bool isCalibrated;
 
-        // ボタンマスク
-        private uint maskZL;
-        private uint maskL;
+        // ボタンマスク（球種選択: 上矢印=カーブ、下矢印=フォーク）
+        private uint maskUp;
+        private uint maskDown;
         private uint prevLeftMask;
 
         // キーボードフォールバック（デバッグ用）
@@ -87,8 +87,8 @@ namespace JoyconBaseball.Phase1.Gameplay
             controller    = gameController;
             joyconBridge  = bridge;
 
-            maskZL = bridge.GetButtonMask("ZL");
-            maskL  = bridge.GetButtonMask("L");
+            maskUp   = bridge.GetButtonMask("UP");
+            maskDown = bridge.GetButtonMask("DOWN");
 
             useKeyboard = bridge == null || !bridge.IsAvailable || !bridge.LeftConnected;
         }
@@ -157,14 +157,14 @@ namespace JoyconBaseball.Phase1.Gameplay
 
         private void UpdatePitchTypeFromButtons()
         {
-            bool zlHeld = false;
-            bool lHeld  = false;
+            bool upHeld   = false;
+            bool downHeld = false;
 
             if (joyconBridge != null && joyconBridge.IsAvailable && joyconBridge.LeftConnected)
             {
                 var mask = joyconBridge.GetLeftButtonsMask();
-                zlHeld = maskZL != 0 && (mask & maskZL) != 0;
-                lHeld  = maskL  != 0 && (mask & maskL)  != 0;
+                upHeld   = maskUp   != 0 && (mask & maskUp)   != 0;
+                downHeld = maskDown != 0 && (mask & maskDown) != 0;
             }
             else
             {
@@ -172,15 +172,15 @@ namespace JoyconBaseball.Phase1.Gameplay
                 var kb = Keyboard.current;
                 if (kb != null)
                 {
-                    zlHeld = kb.zKey.isPressed;
-                    lHeld  = kb.xKey.isPressed;
+                    upHeld   = kb.zKey.isPressed;
+                    downHeld = kb.xKey.isPressed;
                 }
             }
 
-            if (zlHeld && lHeld)      currentPitchType = PitchType.CurveFork;
-            else if (zlHeld)          currentPitchType = PitchType.Curve;
-            else if (lHeld)           currentPitchType = PitchType.Fork;
-            else                      currentPitchType = PitchType.Straight;
+            if (upHeld && downHeld) currentPitchType = PitchType.CurveFork;
+            else if (upHeld)        currentPitchType = PitchType.Curve;
+            else if (downHeld)      currentPitchType = PitchType.Fork;
+            else                    currentPitchType = PitchType.Straight;
         }
 
         // ── カーブ方向（X 軸傾き） ───────────────────────────────
