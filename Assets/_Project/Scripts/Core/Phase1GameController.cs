@@ -15,6 +15,17 @@ namespace JoyconBaseball.Phase1.Core
         private const float MinPitchSpeedKmh = 40f;
         private const float MaxPitchSpeedKmh = 200f;
 
+        [Header("Random Pitch Settings")]
+        [Tooltip("ランダム球速の最小値 (km/h)")]
+        public float randomSpeedMin = 100f;
+        [Tooltip("ランダム球速の最大値 (km/h)")]
+        public float randomSpeedMax = 150f;
+        [Tooltip("ストレートの出現確率 (0〜1)")]
+        [Range(0f, 1f)] public float straightWeight = 0.5f;
+        [Tooltip("カーブの出現確率 (0〜1)")]
+        [Range(0f, 1f)] public float curveWeight = 0.25f;
+        // フォークの出現確率 = 1 - straightWeight - curveWeight
+
         private readonly List<string> atBatResults = new();
 
         private Phase1SceneReferences sceneReferences;
@@ -36,7 +47,8 @@ namespace JoyconBaseball.Phase1.Core
         private bool pitchInProgress;
         private bool gameOver;
 
-        private float pitchSpeedKmh = 120f;
+        private float pitchSpeedKmh = 120f;    // 手動調整用（AdjustPitchSpeed で変更）
+        private float lastThrownSpeedKmh = 0f; // 直前の投球速度（HUD 表示用）
         private Phase1Ball activeBall;
         private uint previousRightButtonsMask;
         private uint buttonMaskA;
@@ -229,11 +241,44 @@ namespace JoyconBaseball.Phase1.Core
             UpdateHud("Pitching...");
             yield return new WaitForSeconds(0.35f);
 
-            Vector3? strikeZoneCenter = strikeZoneCollider != null
-                ? strikeZoneCollider.transform.TransformPoint(strikeZoneCollider.center)
-                : (Vector3?)null;
-            activeBall = pitchingMachine.ThrowStraightBall(pitchSpeedKmh, sceneReferences != null ? sceneReferences.BallPrefab : null, strikeZoneCenter);
+            var pitch = GenerateRandomPitch();
+            lastThrownSpeedKmh = pitch.speedKmh;
+
+            activeBall = pitchingMachine.ThrowBall(pitch, sceneReferences != null ? sceneReferences.BallPrefab : null, strikeZoneCollider);
             activeBall.Initialize(this);
+            UpdateHud("Pitching...");
+        }
+
+        private PitchData GenerateRandomPitch()
+        {
+            // 球速：randomSpeedMin〜randomSpeedMax のランダム
+            var speed = Random.Range(randomSpeedMin, randomSpeedMax);
+
+            // 球種：重みに基づいてランダム選択
+            var r = Random.value;
+            PitchType pitchType;
+            if (r < straightWeight)
+                pitchType = PitchType.Straight;
+            else if (r < straightWeight + curveWeight)
+                pitchType = PitchType.Curve;
+            else
+                pitchType = PitchType.Fork;
+
+            // コース：3x3 グリッドからランダム（ボール球も含む -1〜3 の範囲）
+            var zone = new Vector2Int(Random.Range(0, 3), Random.Range(0, 3));
+
+            // カーブ方向・変化量：ランダム
+            var curveDir    = Random.value < 0.5f ? -1 : 1;
+            var curveAmount = Random.Range(0.6f, 1.0f);
+
+            return new PitchData
+            {
+                targetZone  = zone,
+                pitchType   = pitchType,
+                curveDir    = pitchType == PitchType.Straight ? 0 : curveDir,
+                curveAmount = pitchType == PitchType.Straight ? 0f : curveAmount,
+                speedKmh    = speed,
+            };
         }
 
         public void NotifyPitchFinishedWithoutHit(bool wasStrike)
@@ -303,13 +348,8 @@ namespace JoyconBaseball.Phase1.Core
 
         private void CalibrateJoycon()
         {
-            if (joyconBridge == null || !joyconBridge.IsAvailable || !joyconBridge.RightConnected)
-            {
-                return;
-            }
-
-            // バットを真横（BatPivot Rotation ≈ 90,0,-90）に持った状態でCキーを押してキャリブレーション
-            joyconBridge.CalibrateRight(batController.transform.rotation);
+            // バットをデフォルト位置にリセット（Home/Capture ボタンと同じ挙動）
+            batController?.GetComponentInChildren<Joycon2ControllerModel>()?.ResetToCalibrationPose();
         }
 
         public void AdjustPitchSpeed(float delta)
@@ -552,7 +592,7 @@ namespace JoyconBaseball.Phase1.Core
                 runnerOnFirst,
                 runnerOnSecond,
                 runnerOnThird,
-                pitchSpeedKmh,
+                lastThrownSpeedKmh,
                 message);
         }
     }

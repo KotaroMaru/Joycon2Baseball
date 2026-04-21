@@ -50,20 +50,27 @@ namespace JoyconBaseball.Phase1.UI
             {
                 for (var row = 0; row < 3; row++)
                 {
-                    var rx = gridX + col * (cellSize + padding);
+                    // zone.x=0(右) を HUD の右側に、zone.x=2(左) を HUD の左側に表示するために (2-col) を使用
+                    var rx = gridX + (2 - col) * (cellSize + padding);
                     var ry = gridY + (2 - row) * (cellSize + padding); // row0=下、row2=上
 
                     var zone = new Vector2Int(col, row);
                     Color bg;
                     if (zone == final && zone != selected)
-                        bg = new Color(0.9f, 0.5f, 0.1f, 0.8f);     // 最終到達ゾーン（オレンジ）
+                        bg = new Color(0.9f, 0.5f, 0.1f, 0.8f);     // 最終到達ゾーン（濃いオレンジ）
                     else if (zone == selected)
-                        bg = new Color(0.2f, 0.8f, 0.2f, 0.8f);     // 狙いゾーン（緑）
+                        bg = new Color(1.0f, 0.4f, 0.0f, 0.9f);     // 狙いゾーン（非常に鮮やかなオレンジ）
                     else
-                        bg = new Color(0.1f, 0.1f, 0.1f, 0.5f);     // 通常（暗灰）
+                        bg = new Color(0.1f, 0.1f, 0.1f, 0.7f);     // 通常（暗灰）
 
-                    GUI.backgroundColor = bg;
-                    GUI.Box(new Rect(rx, ry, cellSize, cellSize), "");
+                    // 背景色を塗りつぶし描画
+                    var rect = new Rect(rx, ry, cellSize, cellSize);
+                    GUI.color = bg;
+                    GUI.DrawTexture(rect, Texture2D.whiteTexture);
+                    GUI.color = Color.white;
+
+                    // 枠線を描画
+                    GUI.Box(rect, "");
 
                     // 座標ラベル
                     GUI.Label(new Rect(rx + 4, ry + 4, cellSize, 20),

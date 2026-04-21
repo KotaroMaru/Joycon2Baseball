@@ -23,6 +23,9 @@ namespace JoyconBaseball.Phase1.Gameplay
         private float lifetime;
         private float timeSinceLanding;
 
+        // 変化球用の連続力（投球中のみ適用）
+        private Vector3 continuousForce;
+
         public bool CanBeHit => !wasHit && !crossedPlate;
 
         public void Initialize(IBallGameController gameController)
@@ -37,6 +40,15 @@ namespace JoyconBaseball.Phase1.Gameplay
             ballBody.linearVelocity = velocity;
         }
 
+        /// <summary>
+        /// 変化球の軌道を作るための連続力を設定する。
+        /// ヒット前の間だけ FixedUpdate で毎フレーム AddForce される。
+        /// </summary>
+        public void SetContinuousForce(Vector3 force)
+        {
+            continuousForce = force;
+        }
+
         public void ApplyHit(Vector3 hitVelocity)
         {
             if (wasHit)
@@ -47,6 +59,15 @@ namespace JoyconBaseball.Phase1.Gameplay
             wasHit = true;
             ballBody.useGravity = true;
             ballBody.linearVelocity = hitVelocity;
+        }
+
+        private void FixedUpdate()
+        {
+            // 変化球力はヒット前・クロスプレート前のみ適用
+            if (!wasHit && !crossedPlate && continuousForce != Vector3.zero)
+            {
+                ballBody.AddForce(continuousForce, ForceMode.Force);
+            }
         }
 
         private void Update()
@@ -72,7 +93,7 @@ namespace JoyconBaseball.Phase1.Gameplay
                 if (!wasHit && !crossedPlate)
                 {
                     crossedPlate = true;
-                    controller?.NotifyPitchFinishedWithoutHit(false);
+                    controller?.NotifyPitchFinishedWithoutHit(passedThroughStrikeZone);
                 }
                 Destroy(gameObject);
             }
@@ -101,6 +122,7 @@ namespace JoyconBaseball.Phase1.Gameplay
         {
             if (!wasHit && !crossedPlate)
             {
+                // StrikeZoneTrigger 名前判定は補助的に残すが、Update内での IsInsideStrikeZone 判定が優先される
                 if (other.gameObject.name == "StrikeZoneTrigger")
                 {
                     passedThroughStrikeZone = true;

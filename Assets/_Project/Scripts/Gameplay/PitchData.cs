@@ -14,6 +14,9 @@ namespace JoyconBaseball.Phase1.Gameplay
         /// <summary>カーブ方向。-1=左、0=なし、+1=右</summary>
         public int curveDir;
 
+        /// <summary>ひねり量から算出したカーブ変化量。0.0=変化なし、1.0=最大変化</summary>
+        public float curveAmount;
+
         /// <summary>振り下ろし速度から算出した球速 (km/h)</summary>
         public float speedKmh;
 

@@ -6,6 +6,7 @@ namespace JoyconBaseball.Phase1.Audio
     {
         private const float BgmVolume = 0.4f;
         private const float SeVolume = 1.0f;
+        private const float StartSeVolume = 0.3f;
 
         private AudioSource bgmSource;
         private AudioSource seSource;
@@ -77,7 +78,7 @@ namespace JoyconBaseball.Phase1.Audio
 
         public void PlayStartSound()
         {
-            PlaySe(startClip, "Start");
+            PlaySe(startClip, "Start", StartSeVolume);
         }
 
         public void PlayHitSound(float hitSpeed)
@@ -129,7 +130,7 @@ namespace JoyconBaseball.Phase1.Audio
             PlaySe(cheeringClip, "Cheering");
         }
 
-        private void PlaySe(AudioClip clip, string clipName)
+        private void PlaySe(AudioClip clip, string clipName, float volume = SeVolume)
         {
             if (clip == null)
             {
@@ -137,7 +138,7 @@ namespace JoyconBaseball.Phase1.Audio
                 return;
             }
 
-            seSource.PlayOneShot(clip);
+            seSource.PlayOneShot(clip, volume);
         }
     }
 }

@@ -22,6 +22,7 @@ namespace JoyconBaseball.Phase1.Core
         // Left JoyCon
         private readonly FieldInfo leftConnectedField;
         private readonly PropertyInfo leftAccelProperty;
+        private readonly PropertyInfo leftGyroProperty;
         private readonly PropertyInfo leftStickProperty;
         private readonly FieldInfo leftJoyconField;
         private readonly object leftDeviceIdValue;
@@ -63,6 +64,7 @@ namespace JoyconBaseball.Phase1.Core
             // Left JoyCon reflection
             leftConnectedField = managerType.GetField("leftConnected", BindingFlags.Public | BindingFlags.Instance);
             leftAccelProperty  = managerType.GetProperty("LeftAccel",  BindingFlags.Public | BindingFlags.Instance);
+            leftGyroProperty   = managerType.GetProperty("LeftGyro",   BindingFlags.Public | BindingFlags.Instance);
             leftStickProperty  = managerType.GetProperty("LeftStick",  BindingFlags.Public | BindingFlags.Instance);
             leftJoyconField    = managerType.GetField("leftJoycon",    BindingFlags.Public | BindingFlags.Instance);
         }
@@ -75,6 +77,34 @@ namespace JoyconBaseball.Phase1.Core
             getLinearAccelerationMethod != null &&
             joyconDeviceIdType != null &&
             rightDeviceIdValue != null;
+
+        /// <summary>Left JoyCon の読み取りに必要な Reflection が解決できているか。</summary>
+        public bool IsLeftAvailable =>
+            managerType != null &&
+            instanceProperty != null &&
+            leftConnectedField != null &&
+            leftAccelProperty != null;
+
+        /// <summary>Reflection の解決状況をコンソールに出力する（デバッグ用）。</summary>
+        public void LogReflectionStatus()
+        {
+            Debug.Log("[Joycon2Bridge] ==== Reflection Status ====");
+            Debug.Log($"  managerType          : {(managerType        != null ? managerType.FullName : "NULL")}");
+            Debug.Log($"  instanceProperty     : {(instanceProperty   != null ? "OK" : "NULL")}");
+            Debug.Log($"  rightConnectedField  : {(rightConnectedField != null ? "OK" : "NULL")}");
+            Debug.Log($"  rightAccelProperty   : {(rightAccelProperty  != null ? "OK" : "NULL")}");
+            Debug.Log($"  consumeGyroDelta     : {(consumeGyroDeltaMethod != null ? "OK" : "NULL")}");
+            Debug.Log($"  getLinearAccel       : {(getLinearAccelerationMethod != null ? "OK" : "NULL")}");
+            Debug.Log($"  joyconDeviceIdType   : {(joyconDeviceIdType  != null ? joyconDeviceIdType.Name : "NULL")}");
+            Debug.Log($"  rightDeviceIdValue   : {(rightDeviceIdValue  != null ? rightDeviceIdValue.ToString() : "NULL")}");
+            Debug.Log($"  leftConnectedField   : {(leftConnectedField  != null ? "OK" : "NULL")}");
+            Debug.Log($"  leftAccelProperty    : {(leftAccelProperty   != null ? "OK" : "NULL")}");
+            Debug.Log($"  leftStickProperty    : {(leftStickProperty   != null ? "OK" : "NULL")}");
+            Debug.Log($"  leftJoyconField      : {(leftJoyconField     != null ? "OK" : "NULL")}");
+            Debug.Log($"  leftDeviceIdValue    : {(leftDeviceIdValue   != null ? leftDeviceIdValue.ToString() : "NULL")}");
+            Debug.Log($"  IsAvailable          : {IsAvailable}");
+            Debug.Log($"  IsLeftAvailable      : {IsLeftAvailable}");
+        }
 
         public bool RightConnected
         {
@@ -177,6 +207,17 @@ namespace JoyconBaseball.Phase1.Core
                 var instance = GetInstance();
                 if (instance == null || leftAccelProperty == null) return Vector3.zero;
                 return (Vector3)leftAccelProperty.GetValue(instance);
+            }
+        }
+
+        /// <summary>Left JoyCon のリアルタイムジャイロ角速度（消費なし）。Y 軸 = ひねり方向。</summary>
+        public Vector3 LeftGyro
+        {
+            get
+            {
+                var instance = GetInstance();
+                if (instance == null || leftGyroProperty == null) return Vector3.zero;
+                return (Vector3)leftGyroProperty.GetValue(instance);
             }
         }
 

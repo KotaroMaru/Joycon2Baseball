@@ -14,14 +14,16 @@ namespace JoyconBaseball.Phase1.Core
     /// 画面分割: 左 = バッター視点、右 = ピッチャー視点
     /// ピッチャーは JoyCon Left を振り下ろすことで投球する。
     /// バッターは既存の JoyCon Right スイングで打つ。
+    ///
+    /// シーン上に Phase2SceneReferences コンポーネントを持つ GameObject を配置し、
+    /// Inspector で全フィールドを設定してください。
     /// </summary>
     public sealed class Phase2GameController : MonoBehaviour, IBallGameController
     {
-        private const float BatReach     = 1.4f;
-        private const float PitchDistance = 17.4f;
+        private const float BatReach = 1.4f;
 
-        // ── 共通 ─────────────────────────────────────────────────
-        private Phase1SceneReferences sceneReferences;
+        // ── シーン参照 ────────────────────────────────────────────
+        private Phase2SceneReferences sceneRefs;
         private Joycon2Bridge         joyconBridge;
         private Camera                batterCamera;
         private Camera                pitcherCamera;
@@ -65,126 +67,97 @@ namespace JoyconBaseball.Phase1.Core
 
         private void Awake()
         {
-            sceneReferences = FindFirstObjectByType<Phase1SceneReferences>();
-            joyconBridge    = new Joycon2Bridge();
+            sceneRefs = FindFirstObjectByType<Phase2SceneReferences>();
+            if (sceneRefs == null)
+            {
+                Debug.LogError("Phase2GameController: Phase2SceneReferences がシーンに見つかりません。" +
+                               "GameObject に Phase2SceneReferences を追加して全フィールドを設定してください。");
+                enabled = false;
+                return;
+            }
+
+            joyconBridge     = new Joycon2Bridge();
             buttonMaskA      = joyconBridge.GetButtonMask("A");
             buttonMaskB      = joyconBridge.GetButtonMask("B");
             buttonMaskR      = joyconBridge.GetButtonMask("R");
             buttonMaskX      = joyconBridge.GetButtonMask("X");
             buttonMaskL_left = joyconBridge.GetButtonMask("L");
 
-            BuildCameras();
-            BuildWorld();
-            BuildUi();
-            BuildAudio();
-            BuildPitcher();
+            InitializeComponents();
             ShowTitle();
         }
 
         // ── セットアップ ──────────────────────────────────────────
 
-        private void BuildCameras()
+        private void InitializeComponents()
         {
-            // バッターカメラ（左半分）
-            var hasAuthored = sceneReferences != null && sceneReferences.GameplayCamera != null;
-            batterCamera = hasAuthored ? sceneReferences.GameplayCamera : Camera.main;
+            // カメラ（左右分割）
+            batterCamera  = sceneRefs.BatterCamera;
+            pitcherCamera = sceneRefs.PitcherCamera;
 
-            if (batterCamera == null)
-            {
-                var go = new GameObject("BatterCamera");
-                batterCamera     = go.AddComponent<Camera>();
-                batterCamera.tag = "MainCamera";
-            }
+            if (batterCamera != null)
+                batterCamera.rect = new Rect(0f, 0f, 0.5f, 1f);
+            if (pitcherCamera != null)
+                pitcherCamera.rect = new Rect(0.5f, 0f, 0.5f, 1f);
 
-            if (!hasAuthored)
-            {
-                batterCamera.transform.position = new Vector3(18.55f, 1.6f, -17f);
-                batterCamera.transform.LookAt(new Vector3(6.29f, 1.1f, -3.16f));
-            }
-
-            batterCamera.rect        = new Rect(0f, 0f, 0.5f, 1f);
-            batterCamera.clearFlags  = CameraClearFlags.Skybox;
-            batterCamera.nearClipPlane = 0.01f;
-
-            // ピッチャーカメラ（右半分）
-            var pitcherCamGo = new GameObject("PitcherCamera");
-            pitcherCamera = pitcherCamGo.AddComponent<Camera>();
-            pitcherCamera.rect        = new Rect(0.5f, 0f, 0.5f, 1f);
-            pitcherCamera.clearFlags  = CameraClearFlags.Skybox;
-            pitcherCamera.nearClipPlane = 0.01f;
-
-            // マウンド後方・やや高め → ホームプレート方向
-            pitcherCamera.transform.position = new Vector3(1.5f, 3.0f, 2.0f);
-            pitcherCamera.transform.LookAt(new Vector3(18.55f, 1.0f, -15.49f));
-        }
-
-        private void BuildWorld()
-        {
-            if (sceneReferences == null || sceneReferences.CreateDirectionalLightIfMissing)
-            {
-                RuntimeSceneFactory.CreateLightingIfMissing();
-            }
-
-            strikeZoneCollider = RuntimeSceneFactory.GetOrCreateStrikeZone(sceneReferences);
+            // ゲームプレイ
+            strikeZoneCollider = sceneRefs.StrikeZoneCollider;
             if (strikeZoneCollider != null)
             {
                 strikeZoneCollider.gameObject.name = "StrikeZoneTrigger";
-                var size = strikeZoneCollider.size;
-                size.z = 2f;
-                strikeZoneCollider.size = size;
+                var sz = strikeZoneCollider.size;
+                sz.z = 2.0f;
+                strikeZoneCollider.size = sz;
             }
 
-            batController    = RuntimeSceneFactory.GetOrCreateBat(sceneReferences, batterCamera.transform, this, BatReach);
-            pitchingMachine  = RuntimeSceneFactory.GetOrCreatePitchingMachine(sceneReferences, PitchDistance);
-            RuntimeSceneFactory.CreateCatcher(pitchingMachine.transform.position, strikeZoneCollider);
-        }
+            pitchingMachine    = sceneRefs.PitchingMachine;
 
-        private void BuildUi()
-        {
-            uiController = RuntimeSceneFactory.GetUi(sceneReferences);
-            if (uiController == null)
+            batController = sceneRefs.BatController;
+            if (batController != null)
             {
-                Debug.LogError("Phase2GameController: Phase1UIController が見つかりません。");
-                enabled = false;
+                batController.Initialize(this, sceneRefs.BatPivot);
+                batController.ConfigureInput(sceneRefs.UseJoyconGyroBatControl, sceneRefs.JoyconSwingThreshold);
             }
-        }
 
-        private void BuildAudio()
-        {
-            var audioGo = new GameObject("Phase1AudioManager");
-            audioGo.transform.SetParent(transform);
-            audioManager = audioGo.AddComponent<Phase1AudioManager>();
-
-            if (sceneReferences != null)
+            // UI
+            uiController = sceneRefs.UiController;
+            if (uiController != null)
             {
-                audioManager.Initialize(
-                    sceneReferences.BgmClip,
-                    sceneReferences.StartClip,
-                    sceneReferences.HitStrongClip,
-                    sceneReferences.HitNormalClip,
-                    sceneReferences.HitWeakClip,
-                    sceneReferences.SwingClip,
-                    sceneReferences.CatcherCatchClip,
-                    sceneReferences.StrikeClip,
-                    sceneReferences.BallClip,
-                    sceneReferences.OutClip,
-                    sceneReferences.CheeringClip);
+                uiController.Initialize();
             }
             else
             {
-                audioManager.Initialize(null, null, null, null, null, null, null, null, null, null, null);
+                Debug.LogError("Phase2GameController: Phase1UIController が見つかりません。");
+                enabled = false;
+                return;
             }
-        }
 
-        private void BuildPitcher()
-        {
-            var pitcherGo  = new GameObject("PitcherController");
-            pitcherController = pitcherGo.AddComponent<PitcherController>();
-            pitcherController.Initialize(this, joyconBridge);
+            // オーディオ
+            audioManager = sceneRefs.AudioManager;
+            if (audioManager != null)
+            {
+                audioManager.Initialize(
+                    sceneRefs.BgmClip,
+                    sceneRefs.StartClip,
+                    sceneRefs.HitStrongClip,
+                    sceneRefs.HitNormalClip,
+                    sceneRefs.HitWeakClip,
+                    sceneRefs.SwingClip,
+                    sceneRefs.CatcherCatchClip,
+                    sceneRefs.StrikeClip,
+                    sceneRefs.BallClip,
+                    sceneRefs.OutClip,
+                    sceneRefs.CheeringClip);
+            }
 
-            var hudGo = new GameObject("PitcherHud");
-            pitcherHud = hudGo.AddComponent<PitcherHudController>();
-            pitcherHud.Initialize(pitcherController);
+            // ピッチャー
+            pitcherController = sceneRefs.PitcherController;
+            if (pitcherController != null)
+                pitcherController.Initialize(this, joyconBridge);
+
+            pitcherHud = sceneRefs.PitcherHudController;
+            if (pitcherHud != null && pitcherController != null)
+                pitcherHud.Initialize(pitcherController);
         }
 
         // ── Update ────────────────────────────────────────────────
@@ -216,31 +189,33 @@ namespace JoyconBaseball.Phase1.Core
                 StartGameplay();
             }
 
-            // バッター（右JoyCon）キャリブレーション: R ボタン / C キー
+            // バッター（右JoyCon）R ボタン / C キー → バットをデフォルト位置にリセット
             if ((kb != null && kb.cKey.wasPressedThisFrame) ||
                 WasJoyconButtonPressed(rightMask, buttonMaskR))
             {
-                CalibrateJoycon();
+                batController?.GetComponentInChildren<Joycon2ControllerModel>()?.ResetToCalibrationPose();
             }
 
-            // ピッチャー（左JoyCon）キャリブレーション: L ボタン / V キー
+            // ピッチャー（左JoyCon）L ボタン / V キー → ピッチャーオブジェクトをデフォルト位置にリセット
             if ((kb != null && kb.vKey.wasPressedThisFrame) ||
                 WasLeftJoyconButtonPressed(leftMask, buttonMaskL_left))
             {
-                pitcherController.CalibrateThrowPose();
+                sceneRefs.PitcherJoyconModel?.ResetToCalibrationPose();
             }
 
             // ピッチ速度調整
             if ((kb != null && (kb.equalsKey.wasPressedThisFrame || kb.numpadPlusKey.wasPressedThisFrame)) ||
                 WasJoyconButtonPressed(rightMask, buttonMaskX))
             {
-                pitcherController.minSpeedKmh = Mathf.Clamp(pitcherController.minSpeedKmh + 5f, 40f, 200f);
+                if (pitcherController != null)
+                    pitcherController.minSpeedKmh = Mathf.Clamp(pitcherController.minSpeedKmh + 5f, 40f, 200f);
             }
 
             if ((kb != null && (kb.minusKey.wasPressedThisFrame || kb.numpadMinusKey.wasPressedThisFrame)) ||
                 WasJoyconButtonPressed(rightMask, buttonMaskB))
             {
-                pitcherController.minSpeedKmh = Mathf.Clamp(pitcherController.minSpeedKmh - 5f, 40f, 200f);
+                if (pitcherController != null)
+                    pitcherController.minSpeedKmh = Mathf.Clamp(pitcherController.minSpeedKmh - 5f, 40f, 200f);
             }
 
             previousRightButtonsMask = rightMask;
@@ -263,8 +238,8 @@ namespace JoyconBaseball.Phase1.Core
             uiController.SetHudVisible(true);
             uiController.HideTitle();
             UpdateHud("Pitcher: swing JoyCon to throw");
-            audioManager.PlayStartSound();
-            audioManager.StartBgm();
+            audioManager?.PlayStartSound();
+            audioManager?.StartBgm();
         }
 
         /// <summary>PitcherController から呼ばれる（JoyCon 振り下ろし or Space キー）</summary>
@@ -273,15 +248,25 @@ namespace JoyconBaseball.Phase1.Core
             if (pitchInProgress || gameOver || uiController.TitleVisible) return;
 
             pitchInProgress = true;
-            StartCoroutine(BeginPitchRoutine(pitch));
+            BeginPitch(pitch);
         }
 
-        private IEnumerator BeginPitchRoutine(PitchData pitch)
+        private void BeginPitch(PitchData pitch)
         {
             UpdateHud("Pitching...");
-            yield return new WaitForSeconds(0.35f);
 
-            activeBall = pitchingMachine.ThrowBall(pitch, sceneReferences != null ? sceneReferences.BallPrefab : null, strikeZoneCollider);
+            var armBall = sceneRefs.PitchArmBall;
+            if (armBall != null)
+            {
+                var spawnPos = armBall.transform.position;
+                armBall.SetActive(false);
+                activeBall = pitchingMachine.ThrowBallFrom(spawnPos, pitch, sceneRefs.BallPrefab, strikeZoneCollider);
+            }
+            else
+            {
+                activeBall = pitchingMachine.ThrowBall(pitch, sceneRefs.BallPrefab, strikeZoneCollider);
+            }
+
             activeBall.Initialize(this);
         }
 
@@ -292,22 +277,23 @@ namespace JoyconBaseball.Phase1.Core
             if (!pitchInProgress || activeBall == null) return;
 
             activeBall.ApplyHit(hitVelocity);
-            audioManager.PlayHitSound(hitVelocity.magnitude);
+            audioManager?.PlayHitSound(hitVelocity.magnitude);
             UpdateHud("Ball in play");
         }
 
         public void NotifySwingStarted()
         {
-            audioManager.PlaySwingSound();
+            audioManager?.PlaySwingSound();
         }
 
         public void NotifyPitchFinishedWithoutHit(bool wasStrike)
         {
             pitchInProgress = false;
             activeBall = null;
-            audioManager.PlayCatcherCatchSound();
+            sceneRefs.PitchArmBall?.SetActive(true);
+            audioManager?.PlayCatcherCatchSound();
 
-            if (wasStrike) RegisterStrike("STRIKE");
+            if (wasStrike) RegisterStrike("LOOKING STRIKE");
             else           RegisterBall();
         }
 
@@ -315,6 +301,7 @@ namespace JoyconBaseball.Phase1.Core
         {
             pitchInProgress = false;
             activeBall = null;
+            sceneRefs.PitchArmBall?.SetActive(true);
             RegisterBattedBallResult(result);
         }
 
@@ -350,18 +337,22 @@ namespace JoyconBaseball.Phase1.Core
                 outs++;
                 atBatResults.Add("K");
                 balls = strikes = 0;
-                audioManager.PlayOutSound();
+                audioManager?.PlayOutSound();
                 CheckGameOver();
-                uiController.ShowCenterPopup("STRIKE OUT!", new Color(0.98f, 0.42f, 0.32f));
+
+                // 見逃し三振か空振り三振かを判定
+                string msg = (label == "LOOKING STRIKE") ? "LOOKING STRIKE OUT!" : "STRIKE OUT!";
+                uiController.ShowCenterPopup(msg, new Color(0.98f, 0.42f, 0.32f));
                 UpdateHud("Strike out");
                 return;
             }
-            if (label == "STRIKE")
+
+            if (label == "LOOKING STRIKE" || label == "STRIKE")
             {
-                audioManager.PlayStrikeSound();
+                audioManager?.PlayStrikeSound();
                 uiController.ShowCenterPopup("STRIKE!", new Color(0.98f, 0.42f, 0.32f));
             }
-            UpdateHud(label);
+            UpdateHud(label == "LOOKING STRIKE" ? "STRIKE" : label);
         }
 
         private void RegisterBall()
@@ -376,7 +367,8 @@ namespace JoyconBaseball.Phase1.Core
                 UpdateHud("Walk");
                 return;
             }
-            audioManager.PlayBallSound();
+            audioManager?.PlayBallSound();
+            uiController.ShowCenterPopup("BALL", new Color(0.4f, 0.86f, 0.54f));
             UpdateHud("BALL");
         }
 
@@ -397,7 +389,7 @@ namespace JoyconBaseball.Phase1.Core
                 case HitResult.HomeRun:
                     atBatResults.Add("HR");
                     ScoreAllRunnersAndBatter();
-                    audioManager.PlayCheeringSound();
+                    audioManager?.PlayCheeringSound();
                     uiController.ShowCenterPopup("HOMERUN!", new Color(1f, 0.82f, 0.18f));
                     UpdateHud("HOMERUN!");
                     break;
@@ -422,7 +414,7 @@ namespace JoyconBaseball.Phase1.Core
                 default:
                     atBatResults.Add("OUT");
                     outs++;
-                    audioManager.PlayOutSound();
+                    audioManager?.PlayOutSound();
                     CheckGameOver();
                     uiController.ShowCenterPopup("OUT!", new Color(0.95f, 0.3f, 0.3f));
                     UpdateHud("OUT!");
@@ -487,7 +479,7 @@ namespace JoyconBaseball.Phase1.Core
 
             gameOver = true;
             pitchInProgress = false;
-            audioManager.StopBgm();
+            audioManager?.StopBgm();
             uiController.ShowResults(atBatResults, score);
         }
 
@@ -497,7 +489,7 @@ namespace JoyconBaseball.Phase1.Core
             runnerOnFirst = runnerOnSecond = runnerOnThird = false;
             pitchInProgress = gameOver = false;
             atBatResults.Clear();
-            audioManager.StopBgm();
+            audioManager?.StopBgm();
 
             if (activeBall != null) { Destroy(activeBall.gameObject); activeBall = null; }
 
@@ -506,12 +498,6 @@ namespace JoyconBaseball.Phase1.Core
         }
 
         // ── ユーティリティ ────────────────────────────────────────
-
-        private void CalibrateJoycon()
-        {
-            if (joyconBridge == null || !joyconBridge.IsAvailable || !joyconBridge.RightConnected) return;
-            joyconBridge.CalibrateRight(batController.transform.rotation);
-        }
 
         private bool WasJoyconButtonPressed(uint currentMask, uint targetMask) =>
             targetMask != 0 &&
@@ -525,9 +511,10 @@ namespace JoyconBaseball.Phase1.Core
 
         private void UpdateHud(string message)
         {
+            var speedKmh = pitcherController != null ? pitcherController.LastThrownSpeedKmh : 0f;
             uiController.UpdateHud(balls, strikes, outs, score,
                 runnerOnFirst, runnerOnSecond, runnerOnThird,
-                pitcherController.minSpeedKmh, message);
+                speedKmh, message);
         }
     }
 }
