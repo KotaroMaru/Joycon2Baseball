@@ -149,9 +149,9 @@ namespace JoyconBaseball.Phase1.Core
             {
                 ballTrackingCamera.enabled = sceneReferences.EnableBallTracking;
                 ballTrackingCamera.Configure(
-                    sceneReferences.CameraMaxRotationSpeed,
-                    sceneReferences.CameraFovExpansion,
-                    sceneReferences.CameraReturnDuration);
+                    sceneReferences.FieldForwardDirection,
+                    sceneReferences.ViewportExitMargin,
+                    sceneReferences.DirectionAngleThreshold);
             }
         }
 
@@ -275,7 +275,7 @@ namespace JoyconBaseball.Phase1.Core
 
             activeBall.ApplyHit(hitVelocity);
             audioManager.PlayHitSound(hitVelocity.magnitude);
-            ballTrackingCamera.StartTracking(activeBall.transform);
+            ballTrackingCamera.StartTracking(activeBall.transform, hitVelocity);
             UpdateHud("Ball in play");
         }
 

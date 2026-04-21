@@ -2,62 +2,80 @@ using UnityEngine;
 
 namespace JoyconBaseball.Phase1.Gameplay
 {
+    [System.Serializable]
+    public struct CameraPreset
+    {
+        public Vector3 position;
+        public Vector3 lookAtTarget;
+    }
+
     public sealed class BallTrackingCamera : MonoBehaviour
     {
-        private enum State { Idle, Tracking, Returning }
+        private enum State { Idle, WaitingForExit, SwitchedToPreset }
+        private enum PresetIndex { Center = 0, Left = 1, Right = 2 }
 
-        private const float DefaultMaxRotationSpeed = 100f;
-        private const float DefaultFovExpansion = 12f;
-        private const float DefaultReturnDuration = 0.6f;
+        // Inspector から調整可能なパラメータ
+        [Header("Presets")]
+        public CameraPreset centerPreset;
+        public CameraPreset leftPreset;
+        public CameraPreset rightPreset;
 
-        private float maxRotationSpeed = DefaultMaxRotationSpeed;
-        private float fovExpansion = DefaultFovExpansion;
-        private float returnDuration = DefaultReturnDuration;
+        [Header("Detection")]
+        public Vector3 fieldForwardDirection = new Vector3(-0.707f, 0f, 0.707f);
+        public float viewportExitMargin = 0.1f;
+        public float directionAngleThreshold = 25f;
+        public float waitingTimeOut = 5f;
 
         private Camera targetCamera;
         private State state = State.Idle;
 
+        private Vector3 defaultPosition;
         private Quaternion defaultRotation;
-        private float defaultFov;
+
         private Transform targetBall;
-
-        private float returnElapsed;
-
-        public void Configure(float rotationSpeed, float fovExp, float returnDur)
-        {
-            maxRotationSpeed = rotationSpeed;
-            fovExpansion = fovExp;
-            returnDuration = returnDur;
-        }
+        private PresetIndex selectedPreset;
+        private float waitingElapsed;
 
         private void Awake()
         {
             targetCamera = GetComponent<Camera>();
         }
 
-        public void StartTracking(Transform ball)
+        public void Configure(Vector3 forwardDir, float margin, float angleThreshold)
         {
-            if (targetCamera == null) return;
+            fieldForwardDirection = forwardDir;
+            viewportExitMargin = margin;
+            directionAngleThreshold = angleThreshold;
+        }
 
+        public void StartTracking(Transform ball, Vector3 hitVelocity)
+        {
+            if (targetCamera == null || ball == null) return;
+
+            // 真後ろへの打球はスキップ
+            var hitDirXZ = new Vector3(hitVelocity.x, 0f, hitVelocity.z).normalized;
+            if (Vector3.Dot(transform.forward, hitDirXZ) < -0.1f) return;
+
+            defaultPosition = transform.position;
             defaultRotation = transform.rotation;
-            defaultFov = targetCamera.fieldOfView;
             targetBall = ball;
-            state = State.Tracking;
+            selectedPreset = SelectPreset(hitVelocity);
+            waitingElapsed = 0f;
+            state = State.WaitingForExit;
         }
 
         public void StopTracking()
         {
             if (state == State.Idle) return;
-            BeginReturn();
+            ReturnToDefault();
         }
 
         public void ForceReset()
         {
-            state = State.Idle;
             targetBall = null;
+            state = State.Idle;
             if (targetCamera == null) return;
-            transform.rotation = defaultRotation;
-            targetCamera.fieldOfView = defaultFov;
+            transform.SetPositionAndRotation(defaultPosition, defaultRotation);
         }
 
         private void LateUpdate()
@@ -66,68 +84,98 @@ namespace JoyconBaseball.Phase1.Gameplay
 
             switch (state)
             {
-                case State.Tracking:
-                    UpdateTracking();
-                    break;
-                case State.Returning:
-                    UpdateReturning();
+                case State.WaitingForExit:
+                    UpdateWaiting();
                     break;
             }
         }
 
-        private void UpdateTracking()
+        private void UpdateWaiting()
         {
-            // ボールが消えたら復帰開始
+            // ボールが消えたら復帰
             if (targetBall == null)
             {
-                BeginReturn();
+                ReturnToDefault();
                 return;
             }
 
-            var toBall = targetBall.position - transform.position;
+            waitingElapsed += Time.deltaTime;
 
-            // ボールが真後ろに飛んだ場合は追従しない
-            if (Vector3.Dot(transform.forward, toBall.normalized) < -0.1f)
+            // タイムアウト（内野ゴロ等、視野内で止まる場合）
+            if (waitingElapsed >= waitingTimeOut)
             {
-                BeginReturn();
+                ReturnToDefault();
                 return;
             }
 
-            var targetRotation = Quaternion.LookRotation(toBall);
-            transform.rotation = Quaternion.RotateTowards(
-                transform.rotation,
-                targetRotation,
-                maxRotationSpeed * Time.deltaTime);
-
-            targetCamera.fieldOfView = Mathf.Lerp(
-                targetCamera.fieldOfView,
-                defaultFov + fovExpansion,
-                Time.deltaTime * 3f);
-        }
-
-        private void UpdateReturning()
-        {
-            returnElapsed += Time.deltaTime;
-            var t = Mathf.Clamp01(returnElapsed / returnDuration);
-            var smooth = Mathf.SmoothStep(0f, 1f, t);
-
-            transform.rotation = Quaternion.Slerp(transform.rotation, defaultRotation, smooth);
-            targetCamera.fieldOfView = Mathf.Lerp(targetCamera.fieldOfView, defaultFov, smooth);
-
-            if (t >= 1f)
+            // ボールが視野外に出たら定点カメラに瞬間カット
+            if (IsBallOutOfView())
             {
-                transform.rotation = defaultRotation;
-                targetCamera.fieldOfView = defaultFov;
-                state = State.Idle;
-                targetBall = null;
+                SwitchToPreset(selectedPreset);
             }
         }
 
-        private void BeginReturn()
+        private bool IsBallOutOfView()
         {
-            state = State.Returning;
-            returnElapsed = 0f;
+            var vp = targetCamera.WorldToViewportPoint(targetBall.position);
+
+            // カメラ背後
+            if (vp.z < 0f) return true;
+
+            return vp.x < viewportExitMargin || vp.x > 1f - viewportExitMargin ||
+                   vp.y < viewportExitMargin || vp.y > 1f - viewportExitMargin;
+        }
+
+        private void SwitchToPreset(PresetIndex preset)
+        {
+            var p = GetPreset(preset);
+            transform.position = p.position;
+            transform.rotation = Quaternion.LookRotation(p.lookAtTarget - p.position);
+            state = State.SwitchedToPreset;
+        }
+
+        private void ReturnToDefault()
+        {
+            transform.SetPositionAndRotation(defaultPosition, defaultRotation);
             targetBall = null;
+            state = State.Idle;
         }
+
+        private PresetIndex SelectPreset(Vector3 hitVelocity)
+        {
+            var hitDirXZ = new Vector3(hitVelocity.x, 0f, hitVelocity.z);
+            var angle = Vector3.SignedAngle(fieldForwardDirection, hitDirXZ, Vector3.up);
+
+            if (angle > directionAngleThreshold)  return PresetIndex.Left;
+            if (angle < -directionAngleThreshold) return PresetIndex.Right;
+            return PresetIndex.Center;
+        }
+
+        private CameraPreset GetPreset(PresetIndex index)
+        {
+            return index switch
+            {
+                PresetIndex.Left  => leftPreset,
+                PresetIndex.Right => rightPreset,
+                _                 => centerPreset,
+            };
+        }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmosSelected()
+        {
+            DrawPresetGizmo(centerPreset, Color.green);
+            DrawPresetGizmo(leftPreset, Color.blue);
+            DrawPresetGizmo(rightPreset, Color.red);
+        }
+
+        private static void DrawPresetGizmo(CameraPreset preset, Color color)
+        {
+            Gizmos.color = color;
+            Gizmos.DrawSphere(preset.position, 0.4f);
+            Gizmos.DrawLine(preset.position, preset.lookAtTarget);
+            Gizmos.DrawWireSphere(preset.lookAtTarget, 0.2f);
+        }
+#endif
     }
 }
