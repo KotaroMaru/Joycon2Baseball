@@ -22,7 +22,6 @@ namespace JoyconBaseball.Phase1.Core
         private Camera mainCamera;
         private Phase1UIController uiController;
         private Phase1AudioManager audioManager;
-        private BallTrackingCamera ballTrackingCamera;
         private PitchingMachine pitchingMachine;
         private BatController batController;
         private BoxCollider strikeZoneCollider;
@@ -141,18 +140,6 @@ namespace JoyconBaseball.Phase1.Core
 
             mainCamera.clearFlags = CameraClearFlags.Skybox;
             mainCamera.nearClipPlane = 0.01f;
-
-            ballTrackingCamera = mainCamera.GetComponent<BallTrackingCamera>()
-                ?? mainCamera.gameObject.AddComponent<BallTrackingCamera>();
-
-            if (sceneReferences != null)
-            {
-                ballTrackingCamera.enabled = sceneReferences.EnableBallTracking;
-                ballTrackingCamera.Configure(
-                    sceneReferences.FieldForwardDirection,
-                    sceneReferences.ViewportExitMargin,
-                    sceneReferences.DirectionAngleThreshold);
-            }
         }
 
         private void BuildWorld()
@@ -253,7 +240,6 @@ namespace JoyconBaseball.Phase1.Core
         {
             pitchInProgress = false;
             activeBall = null;
-            ballTrackingCamera.StopTracking();
             audioManager.PlayCatcherCatchSound();
 
             if (wasStrike)
@@ -275,7 +261,6 @@ namespace JoyconBaseball.Phase1.Core
 
             activeBall.ApplyHit(hitVelocity);
             audioManager.PlayHitSound(hitVelocity.magnitude);
-            ballTrackingCamera.StartTracking(activeBall.transform, hitVelocity);
             UpdateHud("Ball in play");
         }
 
@@ -288,7 +273,6 @@ namespace JoyconBaseball.Phase1.Core
         {
             pitchInProgress = false;
             activeBall = null;
-            ballTrackingCamera.StopTracking();
             RegisterBattedBallResult(result);
         }
 
@@ -547,7 +531,6 @@ namespace JoyconBaseball.Phase1.Core
             gameOver = false;
             atBatResults.Clear();
             audioManager.StopBgm();
-            ballTrackingCamera.ForceReset();
 
             if (activeBall != null)
             {

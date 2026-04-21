@@ -26,12 +26,6 @@ namespace JoyconBaseball.Phase1.Core
         [SerializeField] private bool useJoyconGyroBatControl;
         [SerializeField] private float joyconSwingThreshold = 1.35f;
 
-        [Header("Camera Tracking")]
-        [SerializeField] private bool enableBallTracking = true;
-        [SerializeField] private Vector3 fieldForwardDirection = new Vector3(-0.707f, 0f, 0.707f);
-        [SerializeField] private float viewportExitMargin = 0.1f;
-        [SerializeField] private float directionAngleThreshold = 25f;
-
         [Header("Audio")]
         [SerializeField] private AudioClip bgmClip;
         [SerializeField] private AudioClip startClip;
@@ -55,10 +49,6 @@ namespace JoyconBaseball.Phase1.Core
         public bool CreateDirectionalLightIfMissing => createDirectionalLightIfMissing;
         public bool UseJoyconGyroBatControl => useJoyconGyroBatControl;
         public float JoyconSwingThreshold => joyconSwingThreshold;
-        public bool EnableBallTracking => enableBallTracking;
-        public Vector3 FieldForwardDirection => fieldForwardDirection;
-        public float ViewportExitMargin => viewportExitMargin;
-        public float DirectionAngleThreshold => directionAngleThreshold;
         public AudioClip BgmClip => bgmClip;
         public AudioClip StartClip => startClip;
         public AudioClip HitStrongClip => hitStrongClip;
