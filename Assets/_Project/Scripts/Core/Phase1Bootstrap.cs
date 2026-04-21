@@ -18,10 +18,8 @@ namespace JoyconBaseball.Phase1.Core
 
         private void Awake()
         {
-            if (FindFirstObjectByType<Phase1GameController>() != null)
-            {
-                return;
-            }
+            if (FindFirstObjectByType<Phase1GameController>() != null) return;
+            if (FindFirstObjectByType<Phase2GameController>() != null) return;
 
             gameObject.AddComponent<Phase1GameController>();
         }
