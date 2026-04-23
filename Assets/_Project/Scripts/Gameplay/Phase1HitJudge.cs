@@ -14,7 +14,7 @@ namespace JoyconBaseball.Phase1.Gameplay
 
     public static class Phase1HitJudge
     {
-        private const float OutThreshold    = 8f;
+        private const float OutThreshold    = 0f;
         private const float SingleThreshold = 28f;
         private const float DoubleThreshold = 38f;
         private const float TripleThreshold = 50f;

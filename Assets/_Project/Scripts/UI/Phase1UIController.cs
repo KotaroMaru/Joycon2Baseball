@@ -35,6 +35,7 @@ namespace JoyconBaseball.Phase1.UI
 
         private bool initialized;
         private Coroutine popupCoroutine;
+        private string persistentHint = "";
 
         public bool TitleVisible => titlePanel != null && titlePanel.activeSelf;
 
@@ -71,6 +72,19 @@ namespace JoyconBaseball.Phase1.UI
                 "C: Joy-Con recalibrate";
         }
 
+        /// <summary>任意のテキストでタイトル画面を表示する（Phase3 など用）。</summary>
+        public void ShowTitleWithText(string text)
+        {
+            titlePanel.SetActive(true);
+            titleText.text = text;
+        }
+
+        /// <summary>HUD 下部のヒント行を固定文字列で上書きする。空文字でリセット。</summary>
+        public void SetPersistentHint(string hint)
+        {
+            persistentHint = hint ?? "";
+        }
+
         public void HideTitle()
         {
             titlePanel.SetActive(false);
@@ -104,7 +118,10 @@ namespace JoyconBaseball.Phase1.UI
             scoreValueText.text = score.ToString();
             countValueText.text = $"B {balls}   S {strikes}   O {outs}";
             pitchSpeedValueText.text = $"{pitchSpeed:0} km/h";
-            hintText.text = $"STATUS  {message}\nR/Space pitch  X/+ up  B/- down";
+            var hint = string.IsNullOrEmpty(persistentHint)
+                ? "R/Space pitch  X/+ up  B/- down"
+                : persistentHint;
+            hintText.text = $"STATUS  {message}\n{hint}";
             SetBaseLamp(firstBaseLamp, runnerOnFirst);
             SetBaseLamp(secondBaseLamp, runnerOnSecond);
             SetBaseLamp(thirdBaseLamp, runnerOnThird);
@@ -123,6 +140,54 @@ namespace JoyconBaseball.Phase1.UI
             }
 
             popupCoroutine = StartCoroutine(ShowPopupRoutine(message, color));
+        }
+
+        /// <summary>
+        /// ピッチャー視点のリザルト画面を表示する。
+        /// atBatResults の内容（"K", "BB", "1B", "2B", "3B", "HR", "OUT"）を集計して表示する。
+        /// </summary>
+        public void ShowPitcherResults(List<string> atBatResults, int runsAllowed)
+        {
+            titlePanel.SetActive(false);
+            hudPanel.SetActive(false);
+            resultPanel.SetActive(true);
+
+            var strikeouts  = 0;
+            var walks       = 0;
+            var hitsAllowed = 0;
+            var groundOuts  = 0;
+
+            foreach (var r in atBatResults)
+            {
+                switch (r)
+                {
+                    case "K":   strikeouts++;  break;
+                    case "BB":  walks++;       break;
+                    case "1B":
+                    case "2B":
+                    case "3B":
+                    case "HR":  hitsAllowed++; break;
+                    case "OUT": groundOuts++;  break;
+                }
+            }
+
+            var builder = new StringBuilder();
+            builder.AppendLine("GAME OVER  - PITCHER RESULTS -");
+            builder.AppendLine();
+            builder.AppendLine($"Batters faced : {atBatResults.Count}");
+            builder.AppendLine($"Strikeouts    : {strikeouts}");
+            builder.AppendLine($"Walks         : {walks}");
+            builder.AppendLine($"Hits allowed  : {hitsAllowed}");
+            builder.AppendLine($"Outs (ground) : {groundOuts}");
+            builder.AppendLine($"Runs allowed  : {runsAllowed}");
+            builder.AppendLine();
+
+            for (var i = 0; i < atBatResults.Count; i++)
+                builder.AppendLine($"  {i + 1,2}. {atBatResults[i]}");
+
+            builder.AppendLine();
+            builder.AppendLine("Press R / Minus to return to title");
+            resultText.text = builder.ToString();
         }
 
         public void ShowResults(List<string> atBatResults, int score)

@@ -5779,8 +5779,8 @@ MonoBehaviour:
   curveLateralForce: 3.5
   curveDropForce: 0
   curveAimBias: 0.25
-  forkDropForce: 5
-  forkAimHeightBias: 0.25
+  forkDropForce: 2
+  forkAimHeightBias: 0.1
 --- !u!4 &2103826951
 Transform:
   m_ObjectHideFlags: 0

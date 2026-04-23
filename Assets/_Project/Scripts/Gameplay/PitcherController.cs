@@ -1,6 +1,7 @@
 using JoyconBaseball.Phase1.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
+// IPitchReceiver は JoyconBaseball.Phase1.Core に定義
 
 namespace JoyconBaseball.Phase1.Gameplay
 {
@@ -57,7 +58,7 @@ namespace JoyconBaseball.Phase1.Gameplay
         public float stickDeadzone = 0.3f;
 
         // ── 内部状態 ─────────────────────────────────────────────
-        private Phase2GameController controller;
+        private IPitchReceiver controller;
         private Joycon2Bridge joyconBridge;
 
         private Vector2Int currentZone = new Vector2Int(1, 1);
@@ -98,7 +99,7 @@ namespace JoyconBaseball.Phase1.Gameplay
 
         // ─────────────────────────────────────────────────────────
 
-        public void Initialize(Phase2GameController gameController, Joycon2Bridge bridge)
+        public void Initialize(IPitchReceiver gameController, Joycon2Bridge bridge)
         {
             controller   = gameController;
             joyconBridge = bridge;

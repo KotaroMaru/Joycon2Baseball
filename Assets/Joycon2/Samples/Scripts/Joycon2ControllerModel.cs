@@ -52,7 +52,16 @@ public class Joycon2ControllerModel : MonoBehaviour
         // Reset rotation with Home (0x00100000) or Capture (0x00200000)
         // バットを横向きに構えた状態でボタンを押してキャリブレーション
         if ((buttons & 0x00100000) != 0 || (buttons & 0x00200000) != 0) {
-            transform.localRotation = Quaternion.Euler(calibrationEulerAngles);
+            ResetToCalibrationPose();
         }
+    }
+
+    /// <summary>
+    /// オブジェクトをキャリブレーションポーズ（デフォルト位置）に戻す。
+    /// Home ボタン押下時と同じ挙動。ゲーム側のキャリブレーション処理からも呼び出せる。
+    /// </summary>
+    public void ResetToCalibrationPose()
+    {
+        transform.localRotation = Quaternion.Euler(calibrationEulerAngles);
     }
 }

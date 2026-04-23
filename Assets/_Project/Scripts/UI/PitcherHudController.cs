@@ -14,13 +14,19 @@ namespace JoyconBaseball.Phase1.UI
 
         private PitcherController pitcherController;
 
-        // 右半分の画面 X オフセット
+        // 画面左端からの X オフセット（フルスクリーン=0、右半分=Screen.width*0.5）
         private float screenOffsetX;
+        private bool useLeftSide;
 
-        public void Initialize(PitcherController pitcher)
+        /// <summary>
+        /// ピッチャー HUD を初期化する。
+        /// </summary>
+        /// <param name="pitcher">PitcherController の参照</param>
+        /// <param name="leftSide">true = 画面左寄せ（ソロモード）、false = 画面右半分（2P モード）</param>
+        public void Initialize(PitcherController pitcher, bool leftSide = false)
         {
             pitcherController = pitcher;
-            screenOffsetX = Screen.width * 0.5f;
+            useLeftSide = leftSide;
         }
 
         private void OnGUI()
@@ -28,7 +34,7 @@ namespace JoyconBaseball.Phase1.UI
             if (!showDebugOverlay) return;
             if (pitcherController == null) return;
 
-            screenOffsetX = Screen.width * 0.5f;
+            screenOffsetX = useLeftSide ? 0f : Screen.width * 0.5f;
 
             var pitch = pitcherController.CurrentPitchData;
 

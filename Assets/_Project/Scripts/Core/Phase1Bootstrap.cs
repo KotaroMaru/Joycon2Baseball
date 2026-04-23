@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace JoyconBaseball.Phase1.Core
 {
@@ -7,6 +8,9 @@ namespace JoyconBaseball.Phase1.Core
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateBootstrap()
         {
+            // Phase3 シーンは Phase3Bootstrap が管理するので干渉しない
+            if (SceneManager.GetActiveScene().name == Phase3Bootstrap.SceneName) return;
+
             if (FindFirstObjectByType<Phase1Bootstrap>() != null)
             {
                 return;
@@ -20,6 +24,7 @@ namespace JoyconBaseball.Phase1.Core
         {
             if (FindFirstObjectByType<Phase1GameController>() != null) return;
             if (FindFirstObjectByType<Phase2GameController>() != null) return;
+            if (FindFirstObjectByType<Phase3GameController>() != null) return;
 
             gameObject.AddComponent<Phase1GameController>();
         }

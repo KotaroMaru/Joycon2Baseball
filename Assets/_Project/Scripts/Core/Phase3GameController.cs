@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using JoyconBaseball.Phase1.Audio;
 using JoyconBaseball.Phase1.Gameplay;
@@ -9,23 +8,20 @@ using UnityEngine.InputSystem;
 namespace JoyconBaseball.Phase1.Core
 {
     /// <summary>
-    /// Phase2 マルチプレイ対戦コントローラー。
+    /// Phase3 一人プレイ（ピッチャーモード）コントローラー。
     ///
-    /// 画面分割: 左 = バッター視点、右 = ピッチャー視点
-    /// ピッチャーは JoyCon Left を振り下ろすことで投球する。
-    /// バッターは既存の JoyCon Right スイングで打つ。
+    /// 画面: ピッチャー視点のみ（フルスクリーン）
+    /// プレイヤー: JoyCon Left を振り下ろして投球
+    /// バッター: AIBatterController が BatPivot を回転させてスイング（人間と同一機構）
     ///
-    /// シーン上に Phase2SceneReferences コンポーネントを持つ GameObject を配置し、
+    /// シーンに Phase3SceneReferences を持つ GameObject を配置し、
     /// Inspector で全フィールドを設定してください。
     /// </summary>
-    public sealed class Phase2GameController : MonoBehaviour, IBallGameController, IPitchReceiver
+    public sealed class Phase3GameController : MonoBehaviour, IBallGameController, IPitchReceiver
     {
-        private const float BatReach = 1.4f;
-
         // ── シーン参照 ────────────────────────────────────────────
-        private Phase2SceneReferences sceneRefs;
+        private Phase3SceneReferences sceneRefs;
         private Joycon2Bridge         joyconBridge;
-        private Camera                batterCamera;
         private Camera                pitcherCamera;
         private Phase1UIController    uiController;
         private Phase1AudioManager    audioManager;
@@ -34,6 +30,7 @@ namespace JoyconBaseball.Phase1.Core
         private BoxCollider           strikeZoneCollider;
         private PitcherController     pitcherController;
         private PitcherHudController  pitcherHud;
+        private AIBatterController    aiBatter;
 
         // ── ゲーム状態 ────────────────────────────────────────────
         private int balls;
@@ -49,14 +46,10 @@ namespace JoyconBaseball.Phase1.Core
 
         private Phase1Ball activeBall;
 
-        // ── JoyCon ボタンマスク ────────────────────────────────
-        private uint previousRightButtonsMask;
+        // ── JoyCon ボタンマスク（Left JoyCon のみ） ─────────────
         private uint previousLeftButtonsMask;
-        private uint buttonMaskA;
-        private uint buttonMaskR;
-        private uint buttonMaskX;
-        private uint buttonMaskB;
-        private uint buttonMaskL_left;   // Left JoyCon の L ボタン
+        private uint buttonMaskMinus;   // ゲーム開始 / リセット（Left JoyCon の - ボタン = SELECT）
+        private uint buttonMaskL_left;  // ピッチャーモデルのキャリブレーション
 
         public Vector3 BatterPosition =>
             batController != null ? batController.transform.position : Vector3.zero;
@@ -67,20 +60,17 @@ namespace JoyconBaseball.Phase1.Core
 
         private void Awake()
         {
-            sceneRefs = FindFirstObjectByType<Phase2SceneReferences>();
+            sceneRefs = FindFirstObjectByType<Phase3SceneReferences>();
             if (sceneRefs == null)
             {
-                Debug.LogError("Phase2GameController: Phase2SceneReferences がシーンに見つかりません。" +
-                               "GameObject に Phase2SceneReferences を追加して全フィールドを設定してください。");
+                Debug.LogError("Phase3GameController: Phase3SceneReferences がシーンに見つかりません。" +
+                               "GameObject に Phase3SceneReferences を追加して全フィールドを設定してください。");
                 enabled = false;
                 return;
             }
 
             joyconBridge     = new Joycon2Bridge();
-            buttonMaskA      = joyconBridge.GetButtonMask("A");
-            buttonMaskB      = joyconBridge.GetButtonMask("B");
-            buttonMaskR      = joyconBridge.GetButtonMask("R");
-            buttonMaskX      = joyconBridge.GetButtonMask("X");
+            buttonMaskMinus  = joyconBridge.GetButtonMask("SELECT"); // Left JoyCon の - ボタン
             buttonMaskL_left = joyconBridge.GetButtonMask("L");
 
             InitializeComponents();
@@ -91,14 +81,10 @@ namespace JoyconBaseball.Phase1.Core
 
         private void InitializeComponents()
         {
-            // カメラ（左右分割）
-            batterCamera  = sceneRefs.BatterCamera;
+            // カメラ（フルスクリーン）
             pitcherCamera = sceneRefs.PitcherCamera;
-
-            if (batterCamera != null)
-                batterCamera.rect = new Rect(0f, 0f, 0.5f, 1f);
             if (pitcherCamera != null)
-                pitcherCamera.rect = new Rect(0.5f, 0f, 0.5f, 1f);
+                pitcherCamera.rect = new Rect(0f, 0f, 1f, 1f);
 
             // ゲームプレイ
             strikeZoneCollider = sceneRefs.StrikeZoneCollider;
@@ -110,25 +96,31 @@ namespace JoyconBaseball.Phase1.Core
                 strikeZoneCollider.size = sz;
             }
 
-            pitchingMachine    = sceneRefs.PitchingMachine;
+            pitchingMachine = sceneRefs.PitchingMachine;
 
+            // バッター（JoyCon 入力なし、AI が BatPivot を回転させる）
             batController = sceneRefs.BatController;
             if (batController != null)
             {
                 batController.Initialize(this, sceneRefs.BatPivot);
-                batController.ConfigureInput(sceneRefs.UseJoyconGyroBatControl, sceneRefs.JoyconSwingThreshold);
+                batController.ConfigureInput(false, 2.0f);
             }
+
+            // AI バッター
+            aiBatter = sceneRefs.AIBatterController;
+            if (aiBatter != null)
+                aiBatter.Initialize(sceneRefs.BatPivot, batController);
 
             // UI
             uiController = sceneRefs.UiController;
             if (uiController != null)
             {
                 uiController.Initialize();
+                uiController.SetPersistentHint("Swing JoyCon-L to pitch  ↑↓ pitch type  ←→ zone  V/L to recalibrate");
             }
             else
             {
-                Debug.LogError("Phase2GameController: Phase1UIController が見つかりません。");
-                enabled = false;
+                Debug.LogError("Phase3GameController: Phase1UIController が Phase3SceneReferences に設定されていません。");
                 return;
             }
 
@@ -157,76 +149,57 @@ namespace JoyconBaseball.Phase1.Core
 
             pitcherHud = sceneRefs.PitcherHudController;
             if (pitcherHud != null && pitcherController != null)
-                pitcherHud.Initialize(pitcherController);
+                pitcherHud.Initialize(pitcherController, leftSide: true);
         }
 
         // ── Update ────────────────────────────────────────────────
 
         private void Update()
         {
-            var kb = Keyboard.current;
-            var rightMask = joyconBridge != null && joyconBridge.IsAvailable && joyconBridge.RightConnected
-                ? joyconBridge.GetRightButtonsMask()
-                : 0;
+            var kb       = Keyboard.current;
             var leftMask = joyconBridge != null && joyconBridge.IsAvailable && joyconBridge.LeftConnected
-                ? joyconBridge.GetLeftButtonsMask()
-                : 0;
+                ? joyconBridge.GetLeftButtonsMask() : 0;
 
             if (gameOver)
             {
-                if ((kb != null && kb.rKey.wasPressedThisFrame) || WasJoyconButtonPressed(rightMask, buttonMaskA))
+                if ((kb != null && kb.rKey.wasPressedThisFrame) ||
+                    WasLeftButtonPressed(leftMask, buttonMaskMinus))
                     ResetGame();
 
-                previousRightButtonsMask = rightMask;
-                previousLeftButtonsMask  = leftMask;
+                previousLeftButtonsMask = leftMask;
                 return;
             }
 
-            // ゲーム開始（Enter）
+            // ゲーム開始: Enter キー / Left JoyCon MINUS ボタン
             if ((kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)) ||
-                WasJoyconButtonPressed(rightMask, buttonMaskA))
+                WasLeftButtonPressed(leftMask, buttonMaskMinus))
             {
                 StartGameplay();
             }
 
-            // バッター（右JoyCon）R ボタン / C キー → バットをデフォルト位置にリセット
-            if ((kb != null && kb.cKey.wasPressedThisFrame) ||
-                WasJoyconButtonPressed(rightMask, buttonMaskR))
-            {
-                batController?.GetComponentInChildren<Joycon2ControllerModel>()?.ResetToCalibrationPose();
-            }
-
-            // ピッチャー（左JoyCon）L ボタン / V キー → ピッチャーオブジェクトをデフォルト位置にリセット
+            // キャリブレーション: V キー / Left JoyCon L ボタン
             if ((kb != null && kb.vKey.wasPressedThisFrame) ||
-                WasLeftJoyconButtonPressed(leftMask, buttonMaskL_left))
+                WasLeftButtonPressed(leftMask, buttonMaskL_left))
             {
                 sceneRefs.PitcherJoyconModel?.ResetToCalibrationPose();
             }
 
-            // ピッチ速度調整
-            if ((kb != null && (kb.equalsKey.wasPressedThisFrame || kb.numpadPlusKey.wasPressedThisFrame)) ||
-                WasJoyconButtonPressed(rightMask, buttonMaskX))
-            {
-                if (pitcherController != null)
-                    pitcherController.minSpeedKmh = Mathf.Clamp(pitcherController.minSpeedKmh + 5f, 40f, 200f);
-            }
-
-            if ((kb != null && (kb.minusKey.wasPressedThisFrame || kb.numpadMinusKey.wasPressedThisFrame)) ||
-                WasJoyconButtonPressed(rightMask, buttonMaskB))
-            {
-                if (pitcherController != null)
-                    pitcherController.minSpeedKmh = Mathf.Clamp(pitcherController.minSpeedKmh - 5f, 40f, 200f);
-            }
-
-            previousRightButtonsMask = rightMask;
-            previousLeftButtonsMask  = leftMask;
+            previousLeftButtonsMask = leftMask;
         }
 
         // ── ゲームフロー ─────────────────────────────────────────
 
         private void ShowTitle()
         {
-            uiController.ShowTitle();
+            uiController.ShowTitleWithText(
+                "SOLO PITCHER MODE\n\n" +
+                "Enter / Minus : start game\n" +
+                "Swing JoyCon-L down : throw\n" +
+                "Left stick : aim zone\n" +
+                "↑ : Curve  ↓ : Fork  ↑+↓ : CurveFork\n" +
+                "LS push / Tab : reset zone & type\n" +
+                "V / L : recalibrate JoyCon\n\n" +
+                "Strike out the CPU batter!");
             uiController.SetHudVisible(false);
             uiController.SetResultVisible(false);
         }
@@ -237,12 +210,12 @@ namespace JoyconBaseball.Phase1.Core
 
             uiController.SetHudVisible(true);
             uiController.HideTitle();
-            UpdateHud("Pitcher: swing JoyCon to throw");
+            UpdateHud("Swing JoyCon-L to throw!");
             audioManager?.PlayStartSound();
             audioManager?.StartBgm();
         }
 
-        /// <summary>PitcherController から呼ばれる（JoyCon 振り下ろし or Space キー）</summary>
+        /// <summary>PitcherController から呼ばれる（IPitchReceiver 実装）。</summary>
         public void NotifyPitchThrown(PitchData pitch)
         {
             if (pitchInProgress || gameOver || uiController.TitleVisible) return;
@@ -268,14 +241,14 @@ namespace JoyconBaseball.Phase1.Core
             }
 
             activeBall.Initialize(this);
+            aiBatter?.OnPitchThrown(pitch, activeBall);
         }
 
-        // ── フィールドコールバック ────────────────────────────────
+        // ── フィールドコールバック（IBallGameController 実装） ────
 
         public void NotifyBallHit(Vector3 hitVelocity)
         {
             if (!pitchInProgress || activeBall == null) return;
-
             activeBall.ApplyHit(hitVelocity);
             audioManager?.PlayHitSound(hitVelocity.magnitude);
             UpdateHud("Ball in play");
@@ -291,6 +264,7 @@ namespace JoyconBaseball.Phase1.Core
             pitchInProgress = false;
             activeBall = null;
             sceneRefs.PitchArmBall?.SetActive(true);
+            aiBatter?.ResetForNextPitch();
             audioManager?.PlayCatcherCatchSound();
 
             if (wasStrike) RegisterStrike("LOOKING STRIKE");
@@ -302,6 +276,7 @@ namespace JoyconBaseball.Phase1.Core
             pitchInProgress = false;
             activeBall = null;
             sceneRefs.PitchArmBall?.SetActive(true);
+            aiBatter?.ResetForNextPitch();
             RegisterBattedBallResult(result);
         }
 
@@ -327,7 +302,7 @@ namespace JoyconBaseball.Phase1.Core
             return new Vector3(side, upward, forward);
         }
 
-        // ── スコア・カウント処理（Phase1 と同一） ─────────────────
+        // ── スコア・カウント処理 ──────────────────────────────────
 
         private void RegisterStrike(string label)
         {
@@ -339,9 +314,7 @@ namespace JoyconBaseball.Phase1.Core
                 balls = strikes = 0;
                 audioManager?.PlayOutSound();
                 CheckGameOver();
-
-                // 見逃し三振か空振り三振かを判定
-                string msg = (label == "LOOKING STRIKE") ? "LOOKING STRIKE OUT!" : "STRIKE OUT!";
+                var msg = (label == "LOOKING STRIKE") ? "LOOKING STRIKE OUT!" : "STRIKE OUT!";
                 uiController.ShowCenterPopup(msg, new Color(0.98f, 0.42f, 0.32f));
                 UpdateHud("Strike out");
                 return;
@@ -422,7 +395,7 @@ namespace JoyconBaseball.Phase1.Core
             }
         }
 
-        // ── 進塁（Phase1 と同一） ─────────────────────────────────
+        // ── 進塁 ──────────────────────────────────────────────────
 
         private void AdvanceRunnersOnWalk()
         {
@@ -431,8 +404,8 @@ namespace JoyconBaseball.Phase1.Core
             var next3 = runnerOnThird;
 
             if (runnerOnFirst && runnerOnSecond && runnerOnThird) score++;
-            if (runnerOnFirst && runnerOnSecond)                  next3 = true;
-            if (runnerOnFirst)                                    next2 = true;
+            if (runnerOnFirst && runnerOnSecond) next3 = true;
+            if (runnerOnFirst)                   next2 = true;
 
             runnerOnFirst = next1; runnerOnSecond = next2; runnerOnThird = next3;
         }
@@ -455,7 +428,6 @@ namespace JoyconBaseball.Phase1.Core
                 runnerOnFirst = false; runnerOnSecond = true; runnerOnThird = n3;
                 return;
             }
-            // Triple
             if (runnerOnFirst)  score++;
             if (runnerOnSecond) score++;
             if (runnerOnThird)  score++;
@@ -480,7 +452,7 @@ namespace JoyconBaseball.Phase1.Core
             gameOver = true;
             pitchInProgress = false;
             audioManager?.StopBgm();
-            uiController.ShowResults(atBatResults, score);
+            uiController.ShowPitcherResults(atBatResults, score);
         }
 
         private void ResetGame()
@@ -493,18 +465,14 @@ namespace JoyconBaseball.Phase1.Core
 
             if (activeBall != null) { Destroy(activeBall.gameObject); activeBall = null; }
 
+            aiBatter?.ResetForNextPitch();
             uiController.SetResultVisible(false);
             ShowTitle();
         }
 
         // ── ユーティリティ ────────────────────────────────────────
 
-        private bool WasJoyconButtonPressed(uint currentMask, uint targetMask) =>
-            targetMask != 0 &&
-            (currentMask & targetMask) != 0 &&
-            (previousRightButtonsMask & targetMask) == 0;
-
-        private bool WasLeftJoyconButtonPressed(uint currentMask, uint targetMask) =>
+        private bool WasLeftButtonPressed(uint currentMask, uint targetMask) =>
             targetMask != 0 &&
             (currentMask & targetMask) != 0 &&
             (previousLeftButtonsMask & targetMask) == 0;

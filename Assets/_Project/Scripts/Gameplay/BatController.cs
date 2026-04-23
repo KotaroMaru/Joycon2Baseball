@@ -20,6 +20,10 @@ namespace JoyconBaseball.Phase1.Gameplay
 
         private float joyconSwingThreshold = 2.0f;  // ベースラインからの突出量の閾値
 
+        // ── AI スイング用 ─────────────────────────────────────────
+        private bool aiSwingActive;
+        private float aiSwingAcceleration;
+
         public void Initialize(IBallGameController gameController, Transform pivot)
         {
             controller = gameController;
@@ -47,11 +51,34 @@ namespace JoyconBaseball.Phase1.Gameplay
             joyconSwingThreshold = Mathf.Max(0.1f, swingThreshold);
         }
 
+        /// <summary>
+        /// AI バッターからスイングを開始させる。BatPivot を回転させた後、このメソッドを呼ぶ。
+        /// </summary>
+        public void SetAISwing(float peakAcceleration)
+        {
+            aiSwingActive = true;
+            aiSwingAcceleration = peakAcceleration;
+            swinging = true;
+            swingTimer = 0f;
+            controller?.NotifySwingStarted();
+        }
+
         private void Update()
         {
             if (ShouldUseJoyconSwingInput())
             {
                 HandleJoyconSwing();
+            }
+            else if (aiSwingActive)
+            {
+                // AI スイングウィンドウのタイマー管理
+                swingTimer += Time.deltaTime;
+                if (swingTimer >= SwingWindowSeconds)
+                {
+                    swinging = false;
+                    aiSwingActive = false;
+                    aiSwingAcceleration = 0f;
+                }
             }
         }
 
@@ -81,12 +108,18 @@ namespace JoyconBaseball.Phase1.Gameplay
                 ? Mathf.Max(0f, Vector3.Dot(ballRigidbody.linearVelocity, -hitNormal))
                 : 0f;
 
-            // 3. JoyCon スイング速度（ピーク加速度 → m/s に換算）
-            // joyconPeakSwingAcceleration はベースラインからの差分値
-            // 閾値(2.0)〜閾値×5倍(10.0)の範囲でMaxSwingSpeedにマッピング
-            var swingSpeed = ShouldUseJoyconSwingInput()
-                ? Mathf.Lerp(0f, MaxSwingSpeed, Mathf.InverseLerp(joyconSwingThreshold, joyconSwingThreshold * 5f, joyconPeakSwingAcceleration))
-                : 0f;
+            // 3. スイング速度（JoyCon or AI のどちらかのピーク加速度 → m/s に換算）
+            // ベースラインからの差分値。閾値〜閾値×5倍の範囲で MaxSwingSpeed にマッピング
+            float rawAccel;
+            if (ShouldUseJoyconSwingInput())
+                rawAccel = joyconPeakSwingAcceleration;
+            else if (aiSwingActive)
+                rawAccel = aiSwingAcceleration;
+            else
+                rawAccel = 0f;
+
+            var swingSpeed = Mathf.Lerp(0f, MaxSwingSpeed,
+                Mathf.InverseLerp(joyconSwingThreshold, joyconSwingThreshold * 5f, rawAccel));
 
             // 4. 打球速度 = (スイング速度 + ピッチ反発) × 法線方向
             var hitSpeed = swingSpeed + incomingSpeed * Restitution;
@@ -94,6 +127,8 @@ namespace JoyconBaseball.Phase1.Gameplay
 
             controller.NotifyBallHit(hitVelocity);
             joyconPeakSwingAcceleration = 0f;
+            aiSwingActive = false;
+            aiSwingAcceleration = 0f;
         }
 
         private bool ShouldUseJoyconSwingInput()
